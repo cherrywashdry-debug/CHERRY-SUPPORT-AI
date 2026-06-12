@@ -36,12 +36,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TWO-STAGE-V2-STAFF-REPLY"
+VERSION = "CHERRY STAFF AI - TWO-STAGE-V2-STAFF-REPLY-FIX"
 ROOT = Path(__file__).resolve().parent
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
 if not KNOWLEDGE_PATH.is_file():
     KNOWLEDGE_PATH = ROOT.parent / "CHERRY_KNOWLEDGE.md"
 ACTIVE_CASE_KEY = "staff_ai_active_case"
+# In-memory fallback: PTB chat_data can be empty on the next webhook request.
+_AWAITING_STAFF_REPLY: dict[str, dict[str, Any]] = {}
 
 FALLBACK_EN = (
     "Thank you for contacting CHERRY Wash & Dry. Our staff will assist you shortly."
@@ -714,6 +716,86 @@ def show_send_button(stored: dict[str, Any]) -> bool:
     return bool(stored.get("telegram_id"))
 
 
+def _await_key(chat_id: int, user_id: int) -> str:
+    return f"{chat_id}:{user_id}"
+
+
+def set_awaiting_staff_reply(chat_id: int, user_id: int, case: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(case)
+    payload["awaiting_staff_reply"] = True
+    payload["staff_reply_user_id"] = user_id
+    _AWAITING_STAFF_REPLY[_await_key(chat_id, user_id)] = payload
+    logger.info(
+        "awaiting staff reply chat=%s user=%s customer_lang=%s",
+        chat_id,
+        user_id,
+        payload.get("language_name"),
+    )
+    return payload
+
+
+def get_awaiting_staff_reply(chat_id: int, user_id: int) -> dict[str, Any] | None:
+    pending = _AWAITING_STAFF_REPLY.get(_await_key(chat_id, user_id))
+    return dict(pending) if isinstance(pending, dict) else None
+
+
+def clear_awaiting_staff_reply(chat_id: int, user_id: int) -> None:
+    _AWAITING_STAFF_REPLY.pop(_await_key(chat_id, user_id), None)
+
+
+def clear_awaiting_for_chat(chat_id: int) -> None:
+    prefix = f"{chat_id}:"
+    for key in list(_AWAITING_STAFF_REPLY):
+        if key.startswith(prefix):
+            del _AWAITING_STAFF_REPLY[key]
+
+
+def save_active_case(context: ContextTypes.DEFAULT_TYPE, case: dict[str, Any]) -> None:
+    context.chat_data[ACTIVE_CASE_KEY] = case
+
+
+async def process_staff_reply_input(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    stored: dict[str, Any],
+    staff_text: str,
+) -> None:
+    message = update.effective_message
+    if not message:
+        return
+    if not staff_text:
+        await message.reply_text("Please type your reply text.")
+        return
+
+    chat = update.effective_chat
+    user = update.effective_user
+    stored = dict(stored)
+    stored["awaiting_staff_reply"] = False
+    stored["staff_reply_user_id"] = None
+    stored["reply_source"] = "staff"
+    stored["staff_wrote"] = staff_text
+
+    if chat and user:
+        clear_awaiting_staff_reply(chat.id, user.id)
+
+    try:
+        await message.chat.send_action("typing")
+        draft = await asyncio.to_thread(
+            draft_staff_translation,
+            staff_text,
+            customer_language=str(stored.get("detected_language", "") or ""),
+            language_name=str(stored.get("language_name", "") or "Unknown"),
+            customer_original=str(stored.get("question", "") or ""),
+        )
+        stored["customer_reply"] = draft.translated_reply
+        card = format_staff_translation_card(draft)
+        await send_stage2_reply(message=message, context=context, stored=stored, card=card)
+    except Exception:
+        logger.exception("staff reply translation failed")
+        await message.reply_text("⚠️ Could not translate. Try again or send /health.")
+
+
 def new_case_payload(
     *,
     question: str,
@@ -752,7 +834,7 @@ async def send_stage2_reply(
         reply_markup=stage2_keyboard(show_send=show_send_button(stored)),
     )
     stored["reply_message_id"] = sent.message_id
-    context.chat_data[ACTIVE_CASE_KEY] = stored
+    save_active_case(context, stored)
 
 
 async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -769,6 +851,19 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     user = update.effective_user
+    chat = update.effective_chat
+
+    if chat and user:
+        pending = get_awaiting_staff_reply(chat.id, user.id)
+        if pending:
+            await process_staff_reply_input(
+                update,
+                context,
+                stored=pending,
+                staff_text=raw_text.strip(),
+            )
+            return
+
     stored = context.chat_data.get(ACTIVE_CASE_KEY)
     if (
         isinstance(stored, dict)
@@ -776,29 +871,12 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
         and user is not None
         and stored.get("staff_reply_user_id") == user.id
     ):
-        staff_text = raw_text.strip()
-        if not staff_text:
-            await message.reply_text("Please type your reply text.")
-            return
-        stored["awaiting_staff_reply"] = False
-        stored["staff_reply_user_id"] = None
-        stored["reply_source"] = "staff"
-        stored["staff_wrote"] = staff_text
-        try:
-            await message.chat.send_action("typing")
-            draft = await asyncio.to_thread(
-                draft_staff_translation,
-                staff_text,
-                customer_language=str(stored.get("detected_language", "") or ""),
-                language_name=str(stored.get("language_name", "") or "Unknown"),
-                customer_original=str(stored.get("question", "") or ""),
-            )
-            stored["customer_reply"] = draft.translated_reply
-            card = format_staff_translation_card(draft)
-            await send_stage2_reply(message=message, context=context, stored=stored, card=card)
-        except Exception:
-            logger.exception("staff reply translation failed")
-            await message.reply_text("⚠️ Could not translate. Try again or send /health.")
+        await process_staff_reply_input(
+            update,
+            context,
+            stored=stored,
+            staff_text=raw_text.strip(),
+        )
         return
 
     text, telegram_id, order_id = extract_message_context(message)
@@ -817,18 +895,24 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
         text[:120],
     )
 
+    if chat:
+        clear_awaiting_for_chat(chat.id)
+
     try:
         await message.chat.send_action("typing")
         understanding = await asyncio.to_thread(draft_understand, text)
         card = format_stage1_card(text, understanding)
         sent = await message.reply_text(card, reply_markup=stage1_keyboard())
 
-        context.chat_data[ACTIVE_CASE_KEY] = new_case_payload(
-            question=text,
-            understanding=understanding,
-            telegram_id=telegram_id,
-            order_id=order_id,
-            stage1_message_id=sent.message_id,
+        save_active_case(
+            context,
+            new_case_payload(
+                question=text,
+                understanding=understanding,
+                telegram_id=telegram_id,
+                order_id=order_id,
+                stage1_message_id=sent.message_id,
+            ),
         )
     except Exception:
         logger.exception("handle_staff_message failed for text=%r", text[:120])
@@ -856,6 +940,8 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     if action == "cancel":
+        if query.message and query.from_user:
+            clear_awaiting_staff_reply(query.message.chat_id, query.from_user.id)
         context.chat_data.pop(ACTIVE_CASE_KEY, None)
         try:
             await query.edit_message_reply_markup(reply_markup=None)
@@ -873,6 +959,8 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     if action == "help":
+        if query.message and query.from_user:
+            clear_awaiting_staff_reply(query.message.chat_id, query.from_user.id)
         stored["awaiting_staff_reply"] = False
         stored["staff_reply_user_id"] = None
         stored["reply_source"] = "ai"
@@ -890,9 +978,12 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     if action == "staff_reply":
-        stored["awaiting_staff_reply"] = True
-        stored["staff_reply_user_id"] = query.from_user.id if query.from_user else None
-        context.chat_data[ACTIVE_CASE_KEY] = stored
+        if not query.message or not query.from_user:
+            if query.message:
+                await query.message.reply_text("Could not start Staff Reply — try again.")
+            return
+        payload = set_awaiting_staff_reply(query.message.chat_id, query.from_user.id, stored)
+        save_active_case(context, payload)
         await query.message.reply_text(STAFF_REPLY_PROMPT)
         return
 
