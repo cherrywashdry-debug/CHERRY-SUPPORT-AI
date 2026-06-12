@@ -1,8 +1,8 @@
 """CHERRY Staff AI — separate bot for staff-only customer reply drafting.
 
 Two-stage flow:
-  Stage 1 — customer message + meaning for staff (Help Reply / Cancel)
-  Stage 2 — suggested reply after staff presses Help Reply (Rewrite / Shorter / Cancel)
+  Stage 1 — customer message + meaning (Help Reply / Staff Reply / Cancel)
+  Stage 2 — AI suggested reply OR staff text translated to customer language
 
 No Google Sheets, no billing, no V3 logic.
 """
@@ -36,7 +36,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TWO-STAGE-V1"
+VERSION = "CHERRY STAFF AI - TWO-STAGE-V2-STAFF-REPLY"
 ROOT = Path(__file__).resolve().parent
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
 if not KNOWLEDGE_PATH.is_file():
@@ -59,6 +59,20 @@ class StaffUnderstanding:
 class StaffReplyDraft:
     staff_meaning: str
     customer_reply: str
+
+
+@dataclass
+class StaffTranslationDraft:
+    staff_wrote: str
+    language_name: str
+    translated_reply: str
+
+
+STAFF_REPLY_PROMPT = (
+    "✍️ Please type your reply.\n"
+    "You can type in Thai, Khmer, English, or Indonesian.\n"
+    "AI will translate it to the customer language."
+)
 
 
 def parse_chat_id(raw: str) -> int | None:
@@ -415,6 +429,118 @@ def draft_customer_reply(
         )
 
 
+def build_translate_system_prompt() -> str:
+    return (
+        "You translate staff-written replies into the customer's language for CHERRY Wash & Dry.\n"
+        "Keep the same meaning as staff wrote. Do not add new facts, prices, or promises.\n"
+        "Short casual chat style — easy to copy-paste. No filler closings.\n\n"
+        "Return a single JSON object with exactly this key:\n"
+        "  translated_reply — the staff message translated into the customer's language"
+    )
+
+
+def build_translate_user_prompt(
+    staff_text: str,
+    *,
+    customer_language: str,
+    language_name: str,
+    customer_original: str = "",
+    mode: str = "normal",
+    previous_reply: str = "",
+) -> str:
+    context_block = ""
+    if customer_original.strip():
+        context_block = f"Original customer message (context only):\n{customer_original.strip()}\n\n"
+    target = f"Target language: {language_name} ({customer_language})\n\n"
+    if mode == "shorter":
+        return (
+            f"{context_block}{target}"
+            f"Staff wrote:\n{staff_text}\n\n"
+            "Make translated_reply MUCH shorter — max 15 words.\n"
+            f"Previous translated_reply:\n{previous_reply}"
+        )
+    if mode == "rewrite":
+        return (
+            f"{context_block}{target}"
+            f"Staff wrote:\n{staff_text}\n\n"
+            "Rewrite translated_reply with different wording. Same meaning, same brevity.\n"
+            f"Previous translated_reply:\n{previous_reply}"
+        )
+    return (
+        f"{context_block}{target}"
+        f"Staff wrote:\n{staff_text}\n\n"
+        "Translate to the customer language. Keep it short."
+    )
+
+
+def translation_from_payload(payload: dict[str, Any], *, mode: str = "normal") -> str:
+    max_words = 15 if mode == "shorter" else 40
+    max_chars = 120 if mode == "shorter" else 280
+    return clamp_customer_reply(
+        str(payload.get("translated_reply", "") or ""),
+        max_words=max_words,
+        max_chars=max_chars,
+    )
+
+
+def draft_staff_translation(
+    staff_text: str,
+    *,
+    customer_language: str,
+    language_name: str,
+    customer_original: str = "",
+    mode: str = "normal",
+    previous_reply: str = "",
+) -> StaffTranslationDraft:
+    client = openai_client()
+    if not client:
+        return StaffTranslationDraft(
+            staff_wrote=staff_text,
+            language_name=language_name,
+            translated_reply=FALLBACK_EN,
+        )
+
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+    max_tokens = 120 if mode == "shorter" else 220
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            temperature=0.2 if mode == "normal" else 0.4,
+            max_tokens=max_tokens,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": build_translate_system_prompt()},
+                {
+                    "role": "user",
+                    "content": build_translate_user_prompt(
+                        staff_text,
+                        customer_language=customer_language,
+                        language_name=language_name,
+                        customer_original=customer_original,
+                        mode=mode,
+                        previous_reply=previous_reply,
+                    ),
+                },
+            ],
+        )
+        raw = response.choices[0].message.content or "{}"
+        translated = translation_from_payload(parse_llm_json(raw), mode=mode)
+        if not translated or translated == FALLBACK_EN:
+            translated = staff_text
+        return StaffTranslationDraft(
+            staff_wrote=staff_text,
+            language_name=language_name,
+            translated_reply=translated,
+        )
+    except Exception as exc:
+        logger.exception("OpenAI staff translation failed")
+        return StaffTranslationDraft(
+            staff_wrote=staff_text,
+            language_name=language_name,
+            translated_reply=f"⚠️ {openai_error_hint(exc)}",
+        )
+
+
 def format_stage1_card(original_text: str, understanding: StaffUnderstanding) -> str:
     original_block = original_text.strip() or "(no text)"
     return "\n".join([
@@ -453,12 +579,38 @@ def format_stage2_card(
     ])
 
 
+def format_staff_translation_card(
+    draft: StaffTranslationDraft,
+    *,
+    mode_label: str = "",
+) -> str:
+    header = "🤖 CHERRY Staff AI Reply"
+    if mode_label:
+        header = f"{header} · {mode_label}"
+    return "\n".join([
+        header,
+        "",
+        "👀 Staff Wrote",
+        draft.staff_wrote,
+        "",
+        "🌐 Customer Language",
+        draft.language_name,
+        "",
+        "💬 Translated Reply",
+        draft.translated_reply,
+        "",
+        "━━━━━━━━━━━━━━",
+        "⚠️ Check before send",
+    ])
+
+
 def stage1_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("📝 Help Reply", callback_data="staffai:help"),
-            InlineKeyboardButton("❌ Cancel", callback_data="staffai:cancel"),
+            InlineKeyboardButton("✍️ Staff Reply", callback_data="staffai:staff_reply"),
         ],
+        [InlineKeyboardButton("❌ Cancel", callback_data="staffai:cancel")],
     ])
 
 
@@ -470,7 +622,7 @@ def stage2_keyboard(*, show_send: bool = False) -> InlineKeyboardMarkup:
         ],
     ]
     if show_send:
-        rows.append([InlineKeyboardButton("📤 Send to Customer", callback_data="staffai:send")])
+        rows.append([InlineKeyboardButton("✅ Send to Customer", callback_data="staffai:send")])
     rows.append([InlineKeyboardButton("❌ Cancel", callback_data="staffai:cancel_reply")])
     return InlineKeyboardMarkup(rows)
 
@@ -478,7 +630,8 @@ def stage2_keyboard(*, show_send: bool = False) -> InlineKeyboardMarkup:
 USAGE_TEXT = (
     "CHERRY Staff AI — 2-stage support flow\n\n"
     "1) Paste or forward a customer message → bot shows meaning only\n"
-    "2) Press 📝 Help Reply → bot sends suggested reply in a new message\n\n"
+    "2) 📝 Help Reply → AI suggests a reply\n"
+    "   ✍️ Staff Reply → you type, AI translates to customer language\n\n"
     "Optional: forward from customer (for Send to Customer) or add Order ID / Telegram ID in text\n"
     "Setup: /group — show this group's ID for Render"
 )
@@ -557,6 +710,51 @@ async def health_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text(f"{VERSION}\nKnowledge: {kb}\nOpenAI: {llm_status}")
 
 
+def show_send_button(stored: dict[str, Any]) -> bool:
+    return bool(stored.get("telegram_id"))
+
+
+def new_case_payload(
+    *,
+    question: str,
+    understanding: StaffUnderstanding,
+    telegram_id: int | None,
+    order_id: str,
+    stage1_message_id: int,
+) -> dict[str, Any]:
+    return {
+        "question": question,
+        "detected_language": understanding.detected_language,
+        "language_name": understanding.language_name,
+        "staff_meaning": understanding.staff_meaning,
+        "customer_reply": "",
+        "reply_source": "ai",
+        "staff_wrote": "",
+        "awaiting_staff_reply": False,
+        "staff_reply_user_id": None,
+        "stage1_message_id": stage1_message_id,
+        "reply_message_id": None,
+        "telegram_id": telegram_id,
+        "order_id": order_id,
+    }
+
+
+async def send_stage2_reply(
+    *,
+    message: Any,
+    context: ContextTypes.DEFAULT_TYPE,
+    stored: dict[str, Any],
+    card: str,
+    mode_label: str = "",
+) -> None:
+    sent = await message.reply_text(
+        card,
+        reply_markup=stage2_keyboard(show_send=show_send_button(stored)),
+    )
+    stored["reply_message_id"] = sent.message_id
+    context.chat_data[ACTIVE_CASE_KEY] = stored
+
+
 async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_staff_chat(update):
         return
@@ -566,8 +764,45 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
             await message.reply_text("Photo received — please paste the customer's text question as well.")
         return
 
+    raw_text = message.text.strip()
+    if raw_text.startswith("/"):
+        return
+
+    user = update.effective_user
+    stored = context.chat_data.get(ACTIVE_CASE_KEY)
+    if (
+        isinstance(stored, dict)
+        and stored.get("awaiting_staff_reply")
+        and user is not None
+        and stored.get("staff_reply_user_id") == user.id
+    ):
+        staff_text = raw_text.strip()
+        if not staff_text:
+            await message.reply_text("Please type your reply text.")
+            return
+        stored["awaiting_staff_reply"] = False
+        stored["staff_reply_user_id"] = None
+        stored["reply_source"] = "staff"
+        stored["staff_wrote"] = staff_text
+        try:
+            await message.chat.send_action("typing")
+            draft = await asyncio.to_thread(
+                draft_staff_translation,
+                staff_text,
+                customer_language=str(stored.get("detected_language", "") or ""),
+                language_name=str(stored.get("language_name", "") or "Unknown"),
+                customer_original=str(stored.get("question", "") or ""),
+            )
+            stored["customer_reply"] = draft.translated_reply
+            card = format_staff_translation_card(draft)
+            await send_stage2_reply(message=message, context=context, stored=stored, card=card)
+        except Exception:
+            logger.exception("staff reply translation failed")
+            await message.reply_text("⚠️ Could not translate. Try again or send /health.")
+        return
+
     text, telegram_id, order_id = extract_message_context(message)
-    if not text or text.startswith("/"):
+    if not text:
         return
 
     if is_setup_mode():
@@ -575,7 +810,6 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     chat = update.effective_chat
-    user = update.effective_user
     logger.info(
         "stage1 chat=%s user=%s text=%r",
         getattr(chat, "id", None),
@@ -589,17 +823,13 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
         card = format_stage1_card(text, understanding)
         sent = await message.reply_text(card, reply_markup=stage1_keyboard())
 
-        context.chat_data[ACTIVE_CASE_KEY] = {
-            "question": text,
-            "detected_language": understanding.detected_language,
-            "language_name": understanding.language_name,
-            "staff_meaning": understanding.staff_meaning,
-            "customer_reply": "",
-            "stage1_message_id": sent.message_id,
-            "reply_message_id": None,
-            "telegram_id": telegram_id,
-            "order_id": order_id,
-        }
+        context.chat_data[ACTIVE_CASE_KEY] = new_case_payload(
+            question=text,
+            understanding=understanding,
+            telegram_id=telegram_id,
+            order_id=order_id,
+            stage1_message_id=sent.message_id,
+        )
     except Exception:
         logger.exception("handle_staff_message failed for text=%r", text[:120])
         await message.reply_text(
@@ -643,6 +873,9 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     if action == "help":
+        stored["awaiting_staff_reply"] = False
+        stored["staff_reply_user_id"] = None
+        stored["reply_source"] = "ai"
         await query.message.chat.send_action("typing")
         draft = await asyncio.to_thread(
             draft_customer_reply,
@@ -653,13 +886,14 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         stored["staff_meaning"] = draft.staff_meaning
         stored["customer_reply"] = draft.customer_reply
         card = format_stage2_card(draft)
-        show_send = bool(stored.get("telegram_id"))
-        sent = await query.message.reply_text(
-            card,
-            reply_markup=stage2_keyboard(show_send=show_send),
-        )
-        stored["reply_message_id"] = sent.message_id
+        await send_stage2_reply(message=query.message, context=context, stored=stored, card=card)
+        return
+
+    if action == "staff_reply":
+        stored["awaiting_staff_reply"] = True
+        stored["staff_reply_user_id"] = query.from_user.id if query.from_user else None
         context.chat_data[ACTIVE_CASE_KEY] = stored
+        await query.message.reply_text(STAFF_REPLY_PROMPT)
         return
 
     if action == "send":
@@ -681,30 +915,49 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     previous = str(stored.get("customer_reply", "") or "").strip()
     if not previous:
-        await query.message.reply_text("Press 📝 Help Reply first.")
+        await query.message.reply_text("Press 📝 Help Reply or ✍️ Staff Reply first.")
         return
 
     await query.message.chat.send_action("typing")
     mode = "rewrite" if action == "rewrite" else "shorter"
     label = "Rewrite" if action == "rewrite" else "Shorter"
-    draft = await asyncio.to_thread(
-        draft_customer_reply,
-        question,
-        staff_meaning=staff_meaning,
-        mode=mode,
-        previous_reply=previous,
-        knowledge=load_knowledge(),
+
+    if stored.get("reply_source") == "staff":
+        staff_wrote = str(stored.get("staff_wrote", "") or "").strip()
+        if not staff_wrote:
+            await query.message.reply_text("Staff reply text missing — press ✍️ Staff Reply again.")
+            return
+        draft = await asyncio.to_thread(
+            draft_staff_translation,
+            staff_wrote,
+            customer_language=str(stored.get("detected_language", "") or ""),
+            language_name=str(stored.get("language_name", "") or "Unknown"),
+            customer_original=question,
+            mode=mode,
+            previous_reply=previous,
+        )
+        stored["customer_reply"] = draft.translated_reply
+        card = format_staff_translation_card(draft, mode_label=label)
+    else:
+        draft = await asyncio.to_thread(
+            draft_customer_reply,
+            question,
+            staff_meaning=staff_meaning,
+            mode=mode,
+            previous_reply=previous,
+            knowledge=load_knowledge(),
+        )
+        stored["staff_meaning"] = draft.staff_meaning
+        stored["customer_reply"] = draft.customer_reply
+        card = format_stage2_card(draft, mode_label=label)
+
+    await send_stage2_reply(
+        message=query.message,
+        context=context,
+        stored=stored,
+        card=card,
+        mode_label=label,
     )
-    stored["staff_meaning"] = draft.staff_meaning
-    stored["customer_reply"] = draft.customer_reply
-    card = format_stage2_card(draft, mode_label=label)
-    show_send = bool(stored.get("telegram_id"))
-    sent = await query.message.reply_text(
-        card,
-        reply_markup=stage2_keyboard(show_send=show_send),
-    )
-    stored["reply_message_id"] = sent.message_id
-    context.chat_data[ACTIVE_CASE_KEY] = stored
 
 
 def build_health_response() -> str:
