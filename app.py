@@ -36,7 +36,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TWO-LAYER-KM-V2"
+VERSION = "CHERRY STAFF AI - TWO-LAYER-KM-V3-SHORT"
 ROOT = Path(__file__).resolve().parent
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
 if not KNOWLEDGE_PATH.is_file():
@@ -202,28 +202,49 @@ def build_system_prompt(knowledge: str) -> str:
         "    (1) បកប្រែសារអតិថិជនថាពួកគេនិយាយអ្វី\n"
         "    (2) សង្ខេបថាអតិថិជនសួរអ្វី\n"
         "  Write staff_layer_km ONLY in Khmer script — staff are Cambodian, not Thai.\n"
+        "  Keep staff_layer_km to 1–2 SHORT lines (under 120 Khmer characters total).\n"
         "  category — one of: Price, Reward, Pickup, Policy, Order Status, Missing Item, Complaint, General\n"
         "  risk — Low, Medium, or High (High for missing items, damage, refund demands)\n"
-        "  customer_reply — polite reply in THE CUSTOMER'S LANGUAGE, ready to copy-paste\n\n"
+        "  customer_reply — SHORT chat reply in THE CUSTOMER'S LANGUAGE (copy-paste to Telegram/WhatsApp).\n"
+        "  Style: casual shop chat, 1–2 sentences max, under 35 words.\n"
+        "  Answer ONLY what they asked — do not list every package unless they asked for all prices.\n"
+        "  No filler closings (e.g. 'feel free to ask', 'silakan tanyakan', 'หากมีคำถาม').\n\n"
         "Knowledge base:\n"
         f"{knowledge}"
     )
+
+
+def clamp_customer_reply(text: str, *, max_words: int = 35, max_chars: int = 220) -> str:
+    cleaned = " ".join(str(text or "").split()).strip()
+    if not cleaned:
+        return FALLBACK_EN
+    words = cleaned.split()
+    if len(words) > max_words:
+        cleaned = " ".join(words[:max_words]).rstrip(".,;:!?")
+    if len(cleaned) > max_chars:
+        cleaned = cleaned[: max_chars - 1].rsplit(" ", 1)[0].rstrip(".,;:!?") + "…"
+    return cleaned
 
 
 def build_user_prompt(customer_text: str, *, mode: str = "normal", previous_reply: str = "") -> str:
     if mode == "shorter":
         return (
             f"Customer message:\n{customer_text}\n\n"
-            "Make customer_reply shorter and clearer. Keep staff_layer_km updated if meaning changed.\n"
+            "Make customer_reply MUCH shorter — ONE sentence if possible, max 15 words.\n"
+            "Give the minimum facts needed. No greeting, no closing, no extra packages.\n"
+            "Keep staff_layer_km to one short Khmer line.\n"
             f"Previous customer_reply:\n{previous_reply}"
         )
     if mode == "rewrite":
         return (
             f"Customer message:\n{customer_text}\n\n"
-            "Rewrite customer_reply with different wording. Keep facts identical.\n"
+            "Rewrite customer_reply with different wording. Same facts, same brevity (1–2 short sentences).\n"
             f"Previous customer_reply:\n{previous_reply}"
         )
-    return f"Customer message:\n{customer_text}"
+    return (
+        f"Customer message:\n{customer_text}\n\n"
+        "Reply briefly — only what they asked. Short chat style."
+    )
 
 
 def parse_llm_json(raw: str) -> dict[str, Any]:
@@ -237,7 +258,9 @@ def parse_llm_json(raw: str) -> dict[str, Any]:
     return data
 
 
-def result_from_payload(payload: dict[str, Any]) -> StaffAIResult:
+def result_from_payload(payload: dict[str, Any], *, mode: str = "normal") -> StaffAIResult:
+    max_words = 15 if mode == "shorter" else 35
+    max_chars = 120 if mode == "shorter" else 220
     return StaffAIResult(
         detected_language=str(payload.get("detected_language", "") or "unknown").strip(),
         language_name=str(payload.get("language_name", "") or "Unknown").strip(),
@@ -246,7 +269,11 @@ def result_from_payload(payload: dict[str, Any]) -> StaffAIResult:
         ).strip(),
         category=str(payload.get("category", "") or "General").strip(),
         risk=str(payload.get("risk", "") or "Low").strip(),
-        customer_reply=str(payload.get("customer_reply", "") or FALLBACK_EN).strip() or FALLBACK_EN,
+        customer_reply=clamp_customer_reply(
+            str(payload.get("customer_reply", "") or FALLBACK_EN),
+            max_words=max_words,
+            max_chars=max_chars,
+        ),
     )
 
 
@@ -273,10 +300,12 @@ def draft_staff_reply(
 
     kb = knowledge or load_knowledge()
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+    max_tokens = 180 if mode == "shorter" else 320
     try:
         response = client.chat.completions.create(
             model=model,
             temperature=0.3 if mode == "normal" else 0.5,
+            max_tokens=max_tokens,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": build_system_prompt(kb)},
@@ -284,7 +313,7 @@ def draft_staff_reply(
             ],
         )
         raw = response.choices[0].message.content or "{}"
-        return result_from_payload(parse_llm_json(raw))
+        return result_from_payload(parse_llm_json(raw), mode=mode)
     except Exception as exc:
         logger.exception("OpenAI draft failed")
         hint = openai_error_hint(exc)
@@ -327,15 +356,12 @@ def format_two_layer_card(
         "────────────────",
         result.staff_layer_km,
         "",
-        f"✉️ Layer 2 — Suggested reply (copy to customer · {result.language_name})",
-        f"ចម្លើយសំណើ (copy ផ្ញើអតិថិជន · {result.language_name})",
+        f"✉️ Layer 2 — Copy to customer ({result.language_name})",
         "────────────────",
         result.customer_reply,
         "",
         "━━━━━━━━━━━━━━",
-        "⚠️ Review before sending — AI may be wrong",
-        "សូមពិនិត្យមុនផ្ញើ — AI អាចខុសបាន",
-        "Staff may edit, shorten, or rewrite before replying to the customer.",
+        "⚠️ Review before send",
     ]
     return "\n".join(lines)
 
