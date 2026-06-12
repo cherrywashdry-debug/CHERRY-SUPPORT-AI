@@ -85,9 +85,10 @@ def patch_service_docker(service_id: str) -> dict:
 
 def list_env_vars(service_id: str) -> dict[str, str]:
     payload = request("GET", f"/services/{service_id}/env-vars?limit=100")
-    rows = payload.get("envVars") or payload if isinstance(payload, list) else []
-    if isinstance(payload, dict) and "envVars" in payload:
-        rows = payload["envVars"]
+    if isinstance(payload, list):
+        rows = payload
+    else:
+        rows = payload.get("envVars") or []
     out: dict[str, str] = {}
     for item in rows:
         row = item.get("envVar") or item

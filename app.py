@@ -445,22 +445,44 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await query.message.reply_text(card, reply_markup=staff_ai_keyboard())
 
 
-def _install_health_route() -> None:
-    try:
-        from telegram.ext._utils.webhookhandler import WebhookAppClass
-        from tornado.web import RequestHandler
-    except ImportError:
-        logger.warning("Could not install /health route")
-        return
+def build_health_response() -> str:
+    return f"OK {VERSION}\n"
 
-    class HealthHandler(RequestHandler):
+
+def _install_health_route() -> None:
+    """Add GET /health to PTB tornado webhook app (Render health checks)."""
+    import tornado.web
+    from telegram.ext._utils import webhookhandler as wh
+
+    class HealthHandler(tornado.web.RequestHandler):
         def get(self) -> None:
             self.set_header("Content-Type", "text/plain; charset=utf-8")
-            self.write(f"OK {VERSION}\n")
+            self.write(build_health_response())
 
-    WebhookAppClass.handlers = getattr(WebhookAppClass, "handlers", []) + [
-        (r"/health/?", HealthHandler),
-    ]
+    class HealthWebhookApp(tornado.web.Application):
+        def __init__(
+            self,
+            webhook_path: str,
+            bot: Any,
+            update_queue: Any,
+            secret_token: str | None = None,
+        ) -> None:
+            path = webhook_path if webhook_path.startswith("/") else f"/{webhook_path}"
+            shared_objects = {
+                "bot": bot,
+                "update_queue": update_queue,
+                "secret_token": secret_token,
+            }
+            handlers = [
+                (r"/health/?", HealthHandler),
+                (rf"{path}/?", wh.TelegramHandler, shared_objects),
+            ]
+            super().__init__(handlers)
+
+        def log_request(self, handler: tornado.web.RequestHandler) -> None:
+            pass
+
+    wh.WebhookAppClass = HealthWebhookApp
 
 
 def build_app() -> Application:
