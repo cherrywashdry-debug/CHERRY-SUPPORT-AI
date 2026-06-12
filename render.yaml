@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: cherry-support-ai
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: TZ
+        value: Asia/Phnom_Penh
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: WEBHOOK_URL
+        value: https://cherry-support-ai.onrender.com/telegram
+      - key: BOT_TOKEN
+        sync: false
+      - key: STAFF_GROUP_ID
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ALLOWED_USER_IDS
+        sync: false
