@@ -36,13 +36,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TWO-STAGE-V3-LABELS"
+VERSION = "CHERRY STAFF AI - TWO-STAGE-V4-CASE-PERSIST"
 ROOT = Path(__file__).resolve().parent
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
 if not KNOWLEDGE_PATH.is_file():
     KNOWLEDGE_PATH = ROOT.parent / "CHERRY_KNOWLEDGE.md"
 ACTIVE_CASE_KEY = "staff_ai_active_case"
 # In-memory fallback: PTB chat_data can be empty on the next webhook request.
+_ACTIVE_CASES: dict[str, dict[str, Any]] = {}
 _AWAITING_STAFF_REPLY: dict[str, dict[str, Any]] = {}
 
 FALLBACK_EN = (
@@ -750,8 +751,32 @@ def clear_awaiting_for_chat(chat_id: int) -> None:
             del _AWAITING_STAFF_REPLY[key]
 
 
-def save_active_case(context: ContextTypes.DEFAULT_TYPE, case: dict[str, Any]) -> None:
-    context.chat_data[ACTIVE_CASE_KEY] = case
+def _active_case_key(chat_id: int) -> str:
+    return str(chat_id)
+
+
+def save_active_case(
+    context: ContextTypes.DEFAULT_TYPE,
+    case: dict[str, Any],
+    *,
+    chat_id: int,
+) -> None:
+    payload = dict(case)
+    context.chat_data[ACTIVE_CASE_KEY] = payload
+    _ACTIVE_CASES[_active_case_key(chat_id)] = payload
+
+
+def get_active_case(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> dict[str, Any] | None:
+    stored = context.chat_data.get(ACTIVE_CASE_KEY)
+    if isinstance(stored, dict):
+        return dict(stored)
+    fallback = _ACTIVE_CASES.get(_active_case_key(chat_id))
+    return dict(fallback) if isinstance(fallback, dict) else None
+
+
+def clear_active_case(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
+    context.chat_data.pop(ACTIVE_CASE_KEY, None)
+    _ACTIVE_CASES.pop(_active_case_key(chat_id), None)
 
 
 async def process_staff_reply_input(
@@ -834,7 +859,7 @@ async def send_stage2_reply(
         reply_markup=stage2_keyboard(show_send=show_send_button(stored)),
     )
     stored["reply_message_id"] = sent.message_id
-    save_active_case(context, stored)
+    save_active_case(context, stored, chat_id=message.chat_id)
 
 
 async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -864,7 +889,7 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             return
 
-    stored = context.chat_data.get(ACTIVE_CASE_KEY)
+    stored = get_active_case(context, chat.id) if chat else None
     if (
         isinstance(stored, dict)
         and stored.get("awaiting_staff_reply")
@@ -913,6 +938,7 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
                 order_id=order_id,
                 stage1_message_id=sent.message_id,
             ),
+            chat_id=chat.id,
         )
     except Exception:
         logger.exception("handle_staff_message failed for text=%r", text[:120])
@@ -928,7 +954,10 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     action = (query.data or "").split(":", 1)[-1]
-    stored = context.chat_data.get(ACTIVE_CASE_KEY)
+    chat_id = query.message.chat_id if query.message else None
+    if chat_id is None:
+        return
+    stored = get_active_case(context, chat_id)
     if not isinstance(stored, dict):
         await query.message.reply_text("Paste a customer message first.")
         return
@@ -942,7 +971,7 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if action == "cancel":
         if query.message and query.from_user:
             clear_awaiting_staff_reply(query.message.chat_id, query.from_user.id)
-        context.chat_data.pop(ACTIVE_CASE_KEY, None)
+        clear_active_case(context, chat_id)
         try:
             await query.edit_message_reply_markup(reply_markup=None)
         except Exception:
@@ -983,7 +1012,7 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 await query.message.reply_text("Could not start Staff Reply — try again.")
             return
         payload = set_awaiting_staff_reply(query.message.chat_id, query.from_user.id, stored)
-        save_active_case(context, payload)
+        save_active_case(context, payload, chat_id=chat_id)
         await query.message.reply_text(STAFF_REPLY_PROMPT)
         return
 
