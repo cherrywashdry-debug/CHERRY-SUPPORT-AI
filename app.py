@@ -483,6 +483,12 @@ def _install_health_route() -> None:
             pass
 
     wh.WebhookAppClass = HealthWebhookApp
+    try:
+        import telegram.ext._updater as updater_mod
+
+        updater_mod.WebhookAppClass = HealthWebhookApp
+    except ImportError:
+        pass
 
 
 def build_app() -> Application:
