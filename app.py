@@ -103,7 +103,39 @@ def openai_client() -> Any | None:
     except ImportError:
         logger.error("openai package not installed — pip install openai")
         return None
-    return OpenAI(api_key=key)
+    timeout = float(os.getenv("OPENAI_TIMEOUT_SEC", "60") or "60")
+    return OpenAI(api_key=key, timeout=timeout, max_retries=2)
+
+
+def openai_error_hint(exc: Exception) -> str:
+    text = str(exc).lower()
+    if "insufficient_quota" in text or "exceeded your current quota" in text:
+        return (
+            "OpenAI quota exhausted — add billing/credits at platform.openai.com "
+            "or replace OPENAI_API_KEY on Render."
+        )
+    if "rate limit" in text or "429" in text:
+        return "OpenAI rate limit — wait a minute and try again."
+    if "invalid_api_key" in text or "incorrect api key" in text:
+        return "Invalid OPENAI_API_KEY on Render."
+    return f"{exc.__class__.__name__}: {exc}"
+
+
+def probe_openai() -> tuple[bool, str]:
+    client = openai_client()
+    if not client:
+        return False, "NO KEY"
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+    try:
+        client.chat.completions.create(
+            model=model,
+            max_tokens=5,
+            messages=[{"role": "user", "content": "Reply with OK"}],
+        )
+        return True, "OK"
+    except Exception as exc:
+        logger.warning("OpenAI probe failed: %s", exc)
+        return False, openai_error_hint(exc)
 
 
 def load_knowledge() -> str:
@@ -241,17 +273,33 @@ def draft_staff_reply(
 
     kb = knowledge or load_knowledge()
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
-    response = client.chat.completions.create(
-        model=model,
-        temperature=0.3 if mode == "normal" else 0.5,
-        response_format={"type": "json_object"},
-        messages=[
-            {"role": "system", "content": build_system_prompt(kb)},
-            {"role": "user", "content": build_user_prompt(customer_text, mode=mode, previous_reply=previous_reply)},
-        ],
-    )
-    raw = response.choices[0].message.content or "{}"
-    return result_from_payload(parse_llm_json(raw))
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            temperature=0.3 if mode == "normal" else 0.5,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": build_system_prompt(kb)},
+                {"role": "user", "content": build_user_prompt(customer_text, mode=mode, previous_reply=previous_reply)},
+            ],
+        )
+        raw = response.choices[0].message.content or "{}"
+        return result_from_payload(parse_llm_json(raw))
+    except Exception as exc:
+        logger.exception("OpenAI draft failed")
+        hint = openai_error_hint(exc)
+        return StaffAIResult(
+            detected_language="?",
+            language_name="Unknown",
+            staff_layer_km=(
+                "⚠️ OpenAI មិនអាចបង្កើតចម្លើយបាន\n"
+                f"សារអតិថិជន (ដើម): {customer_text}\n"
+                f"Cause: {hint}"
+            ),
+            category="General",
+            risk="Low",
+            customer_reply=FALLBACK_EN,
+        )
 
 
 def format_two_layer_card(
@@ -384,8 +432,9 @@ async def health_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if not is_staff_chat(update):
         return
     kb = "OK" if KNOWLEDGE_PATH.is_file() else "MISSING"
-    llm = "OK" if openai_client() else "NO KEY"
-    await update.message.reply_text(f"{VERSION}\nKnowledge: {kb}\nOpenAI: {llm}")
+    ok, llm = probe_openai()
+    llm_status = llm if ok else f"FAIL — {llm}"
+    await update.message.reply_text(f"{VERSION}\nKnowledge: {kb}\nOpenAI: {llm_status}")
 
 
 async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
