@@ -8,6 +8,7 @@ No Google Sheets, no billing, no V3 logic.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -125,16 +126,20 @@ def resolve_webhook_url() -> str:
 def is_staff_chat(update: Update) -> bool:
     chat = update.effective_chat
     user = update.effective_user
-    if not chat or not user:
+    if not chat:
         return False
     if is_setup_mode():
         if chat.type in ("group", "supergroup"):
             return True
-        return user.id in allowed_user_ids()
+        return user is not None and user.id in allowed_user_ids()
     group = staff_group_id()
     if group and chat.id == group:
         return True
-    return user.id in allowed_user_ids() and chat.type == "private"
+    return (
+        user is not None
+        and user.id in allowed_user_ids()
+        and chat.type == "private"
+    )
 
 
 def extract_customer_text(message: Any) -> str:
@@ -148,6 +153,7 @@ def extract_customer_text(message: Any) -> str:
         text,
         flags=re.IGNORECASE,
     ).strip()
+    text = re.sub(r"@[A-Za-z0-9_]+\s*", "", text).strip()
     return text
 
 
@@ -399,17 +405,32 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
         await message.reply_text(SETUP_HINT)
         return
 
-    await message.chat.send_action("typing")
-    knowledge = load_knowledge()
-    result = draft_staff_reply(text, knowledge=knowledge)
-    card = format_two_layer_card(result, original_text=text)
-    sent = await message.reply_text(card, reply_markup=staff_ai_keyboard())
+    chat = update.effective_chat
+    user = update.effective_user
+    logger.info(
+        "staff message chat=%s user=%s text=%r",
+        getattr(chat, "id", None),
+        getattr(user, "id", None),
+        text[:120],
+    )
 
-    context.chat_data[LAST_QUESTION_KEY] = {
-        "question": text,
-        "customer_reply": result.customer_reply,
-        "reply_message_id": sent.message_id,
-    }
+    try:
+        await message.chat.send_action("typing")
+        knowledge = load_knowledge()
+        result = await asyncio.to_thread(draft_staff_reply, text, knowledge=knowledge)
+        card = format_two_layer_card(result, original_text=text)
+        sent = await message.reply_text(card, reply_markup=staff_ai_keyboard())
+
+        context.chat_data[LAST_QUESTION_KEY] = {
+            "question": text,
+            "customer_reply": result.customer_reply,
+            "reply_message_id": sent.message_id,
+        }
+    except Exception:
+        logger.exception("handle_staff_message failed for text=%r", text[:120])
+        await message.reply_text(
+            "⚠️ Could not draft reply. Send /health to check OpenAI, then try again."
+        )
 
 
 async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -436,7 +457,13 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await query.message.chat.send_action("typing")
     mode = "rewrite" if action == "rewrite" else "shorter"
     label = "Rewrite" if action == "rewrite" else "Shorter"
-    result = draft_staff_reply(question, mode=mode, previous_reply=previous, knowledge=load_knowledge())
+    result = await asyncio.to_thread(
+        draft_staff_reply,
+        question,
+        mode=mode,
+        previous_reply=previous,
+        knowledge=load_knowledge(),
+    )
     card = format_two_layer_card(result, original_text=question, mode_label=label)
 
     stored["customer_reply"] = result.customer_reply
@@ -491,12 +518,24 @@ def _install_health_route() -> None:
         pass
 
 
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.exception("Unhandled bot error", exc_info=context.error)
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            await update.effective_message.reply_text(
+                "⚠️ Bot error — try again or send /health to check OpenAI."
+            )
+        except Exception:
+            pass
+
+
 def build_app() -> Application:
     token = os.getenv("BOT_TOKEN", "").strip()
     if not token:
         raise RuntimeError("BOT_TOKEN is required")
 
-    app = Application.builder().token(token).build()
+    app = Application.builder().token(token).concurrent_updates(True).build()
+    app.add_error_handler(on_error)
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(CommandHandler("group", group_cmd))
     app.add_handler(CommandHandler("chatid", group_cmd))
