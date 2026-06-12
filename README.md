@@ -4,7 +4,19 @@ Separate Telegram bot for CHERRY staff — two-layer reply drafts (Khmer summary
 
 **Production:** https://cherry-support-ai.onrender.com
 
-## Render settings
+## Render settings (pick ONE)
+
+### Option A — Docker (recommended if exit status 127)
+
+| Setting | Value |
+|---------|-------|
+| **Language / Runtime** | **Docker** |
+| **Dockerfile Path** | `./Dockerfile` |
+| **Root Directory** | *(empty)* |
+| **Build Command** | *(empty)* |
+| **Start Command** | *(empty)* |
+
+### Option B — Native Python
 
 | Setting | Value |
 |---------|-------|
@@ -15,6 +27,12 @@ Separate Telegram bot for CHERRY staff — two-layer reply drafts (Khmer summary
 | **Health Check** | `/health` |
 
 `runtime.txt` pins Python 3.12.8.
+
+If logs show `python: command not found` or **exit status 127** → Language is still Rust/wrong. **Use Option A (Docker).**
+
+## Setup
+
+1. Set Render env: `BOT_TOKEN`, `OPENAI_API_KEY`, `WEBHOOK_URL`
 2. Deploy → send `/group` in staff Telegram group → copy `STAFF_GROUP_ID` → redeploy
 3. BotFather `/setprivacy` → **Disable** for the support bot
 
