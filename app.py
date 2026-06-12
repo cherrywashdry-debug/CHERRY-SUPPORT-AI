@@ -36,7 +36,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TWO-STAGE-V2-STAFF-REPLY-FIX"
+VERSION = "CHERRY STAFF AI - TWO-STAGE-V3-LABELS"
 ROOT = Path(__file__).resolve().parent
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
 if not KNOWLEDGE_PATH.is_file():
@@ -564,7 +564,7 @@ def format_stage2_card(
     *,
     mode_label: str = "",
 ) -> str:
-    header = "🤖 CHERRY Staff AI Reply"
+    header = "🤖 CHERRY AI Reply"
     if mode_label:
         header = f"{header} · {mode_label}"
     return "\n".join([
@@ -573,7 +573,7 @@ def format_stage2_card(
         "👀 Meaning for Staff",
         draft.staff_meaning,
         "",
-        "💬 Suggested Reply",
+        "💬 Reply /តបភ្ញៀវ",
         draft.customer_reply,
         "",
         "━━━━━━━━━━━━━━",
@@ -586,19 +586,19 @@ def format_staff_translation_card(
     *,
     mode_label: str = "",
 ) -> str:
-    header = "🤖 CHERRY Staff AI Reply"
+    header = "🤖 CHERRY AI Reply"
     if mode_label:
         header = f"{header} · {mode_label}"
     return "\n".join([
         header,
         "",
-        "👀 Staff Wrote",
+        "👩🏼‍💻 Staff /បុគ្គលិក",
         draft.staff_wrote,
         "",
         "🌐 Customer Language",
         draft.language_name,
         "",
-        "💬 Translated Reply",
+        "💬 Reply /តបភ្ញៀវ",
         draft.translated_reply,
         "",
         "━━━━━━━━━━━━━━",
