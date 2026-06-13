@@ -18,13 +18,14 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import ForceReply, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
+    PicklePersistence,
     filters,
 )
 
@@ -36,14 +37,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TWO-STAGE-V4-CUSTOMER-LANG"
+VERSION = "CHERRY STAFF AI - TWO-STAGE-V5-STAFF-REPLY-FIX"
 ROOT = Path(__file__).resolve().parent
+STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
 if not KNOWLEDGE_PATH.is_file():
     KNOWLEDGE_PATH = ROOT.parent / "CHERRY_KNOWLEDGE.md"
 ACTIVE_CASE_KEY = "staff_ai_active_case"
-# In-memory fallback: PTB chat_data can be empty on the next webhook request.
+# In-memory fallback between webhook requests (same process).
 _AWAITING_STAFF_REPLY: dict[str, dict[str, Any]] = {}
+_PROMPT_TO_CASE: dict[int, dict[str, Any]] = {}
 
 FALLBACK_EN = (
     "Thank you for contacting CHERRY Wash & Dry. Our staff will assist you shortly."
@@ -72,6 +75,7 @@ class StaffTranslationDraft:
 
 STAFF_REPLY_PROMPT = (
     "✍️ Please type your reply.\n"
+    "Reply to THIS message (swipe / reply).\n"
     "You can type in Thai, Khmer, English, or Indonesian.\n"
     "AI will translate it to the customer language."
 )
@@ -776,6 +780,82 @@ def clear_awaiting_for_chat(chat_id: int) -> None:
             del _AWAITING_STAFF_REPLY[key]
 
 
+def bind_staff_reply_wait(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    user_id: int,
+    case: dict[str, Any],
+) -> dict[str, Any]:
+    payload = set_awaiting_staff_reply(chat_id, user_id, case)
+    context.user_data["staff_ai_awaiting"] = True
+    context.user_data["staff_ai_case"] = payload
+    awaiting = context.application.bot_data.setdefault("staff_ai_awaiting", {})
+    awaiting[_await_key(chat_id, user_id)] = payload
+    save_active_case(context, payload)
+    return payload
+
+
+def clear_staff_reply_wait(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    user_id: int,
+    *,
+    prompt_id: int | None = None,
+) -> None:
+    clear_awaiting_staff_reply(chat_id, user_id)
+    context.user_data.pop("staff_ai_awaiting", None)
+    context.user_data.pop("staff_ai_case", None)
+    awaiting = context.application.bot_data.get("staff_ai_awaiting", {})
+    awaiting.pop(_await_key(chat_id, user_id), None)
+    if prompt_id is not None:
+        _PROMPT_TO_CASE.pop(prompt_id, None)
+
+
+def resolve_pending_staff_case(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> dict[str, Any] | None:
+    message = update.effective_message
+    user = update.effective_user
+    chat = update.effective_chat
+    if not message or not user or not chat:
+        return None
+
+    reply_to = message.reply_to_message
+    if reply_to and reply_to.message_id in _PROMPT_TO_CASE:
+        case = dict(_PROMPT_TO_CASE.pop(reply_to.message_id))
+        logger.info("staff reply matched prompt_id=%s user=%s", reply_to.message_id, user.id)
+        return case
+
+    pending = get_awaiting_staff_reply(chat.id, user.id)
+    if pending:
+        logger.info("staff reply matched memory user=%s lang=%s", user.id, pending.get("language_name"))
+        return pending
+
+    bot_awaiting = context.application.bot_data.get("staff_ai_awaiting", {})
+    mem = bot_awaiting.get(_await_key(chat.id, user.id))
+    if isinstance(mem, dict) and mem.get("awaiting_staff_reply"):
+        logger.info("staff reply matched bot_data user=%s", user.id)
+        return dict(mem)
+
+    if context.user_data.get("staff_ai_awaiting") and isinstance(context.user_data.get("staff_ai_case"), dict):
+        case = dict(context.user_data["staff_ai_case"])
+        if case.get("staff_reply_user_id") == user.id:
+            logger.info("staff reply matched user_data user=%s", user.id)
+            return case
+
+    stored = context.chat_data.get(ACTIVE_CASE_KEY)
+    if (
+        isinstance(stored, dict)
+        and stored.get("awaiting_staff_reply")
+        and stored.get("staff_reply_user_id") == user.id
+    ):
+        logger.info("staff reply matched chat_data user=%s", user.id)
+        return dict(stored)
+
+    return None
+
+
 def save_active_case(context: ContextTypes.DEFAULT_TYPE, case: dict[str, Any]) -> None:
     context.chat_data[ACTIVE_CASE_KEY] = case
 
@@ -802,8 +882,14 @@ async def process_staff_reply_input(
     stored["reply_source"] = "staff"
     stored["staff_wrote"] = staff_text
 
+    prompt_id = stored.get("staff_reply_prompt_id")
     if chat and user:
-        clear_awaiting_staff_reply(chat.id, user.id)
+        clear_staff_reply_wait(
+            context,
+            chat.id,
+            user.id,
+            prompt_id=int(prompt_id) if prompt_id else None,
+        )
 
     try:
         await message.chat.send_action("typing")
@@ -879,28 +965,12 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
     user = update.effective_user
     chat = update.effective_chat
 
-    if chat and user:
-        pending = get_awaiting_staff_reply(chat.id, user.id)
-        if pending:
-            await process_staff_reply_input(
-                update,
-                context,
-                stored=pending,
-                staff_text=raw_text.strip(),
-            )
-            return
-
-    stored = context.chat_data.get(ACTIVE_CASE_KEY)
-    if (
-        isinstance(stored, dict)
-        and stored.get("awaiting_staff_reply")
-        and user is not None
-        and stored.get("staff_reply_user_id") == user.id
-    ):
+    pending = resolve_pending_staff_case(update, context)
+    if pending:
         await process_staff_reply_input(
             update,
             context,
-            stored=stored,
+            stored=pending,
             staff_text=raw_text.strip(),
         )
         return
@@ -967,7 +1037,7 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     if action == "cancel":
         if query.message and query.from_user:
-            clear_awaiting_staff_reply(query.message.chat_id, query.from_user.id)
+            clear_staff_reply_wait(context, query.message.chat_id, query.from_user.id)
         context.chat_data.pop(ACTIVE_CASE_KEY, None)
         try:
             await query.edit_message_reply_markup(reply_markup=None)
@@ -986,7 +1056,7 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     if action == "help":
         if query.message and query.from_user:
-            clear_awaiting_staff_reply(query.message.chat_id, query.from_user.id)
+            clear_staff_reply_wait(context, query.message.chat_id, query.from_user.id)
         stored["awaiting_staff_reply"] = False
         stored["staff_reply_user_id"] = None
         stored["reply_source"] = "ai"
@@ -1013,9 +1083,21 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             if query.message:
                 await query.message.reply_text("Could not start Staff Reply — try again.")
             return
-        payload = set_awaiting_staff_reply(query.message.chat_id, query.from_user.id, stored)
+        payload = bind_staff_reply_wait(
+            context,
+            query.message.chat_id,
+            query.from_user.id,
+            stored,
+        )
+        sent = await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=STAFF_REPLY_PROMPT,
+            reply_markup=ForceReply(selective=True),
+            reply_to_message_id=query.message.message_id,
+        )
+        payload["staff_reply_prompt_id"] = sent.message_id
+        _PROMPT_TO_CASE[sent.message_id] = dict(payload)
         save_active_case(context, payload)
-        await query.message.reply_text(STAFF_REPLY_PROMPT)
         return
 
     if action == "send":
@@ -1150,7 +1232,16 @@ def build_app() -> Application:
     if not token:
         raise RuntimeError("BOT_TOKEN is required")
 
-    app = Application.builder().token(token).concurrent_updates(True).build()
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    persistence = PicklePersistence(filepath=str(STATE_PATH))
+
+    app = (
+        Application.builder()
+        .token(token)
+        .persistence(persistence)
+        .concurrent_updates(True)
+        .build()
+    )
     app.add_error_handler(on_error)
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(CommandHandler("group", group_cmd))
