@@ -317,6 +317,9 @@ Yes — shop is open **24 hours**. Pickup/delivery runs **09:30–00:00**.
 **How much for one bag?**  
 Depends on machine size: small 14 kg **210–240 B**, large 18 kg **270–300 B** per machine — not by weight.
 
+**I only have a little / sedikit / not much laundry — is it cheaper?**  
+No — CHERRY charges **per machine package**, not by clothing amount. Even a small load uses one full machine: minimum **210 B** (14 kg standard). Options: 14 kg 210/240 B, 18 kg 270/300 B.
+
 **Do I get points on 210 Baht package?**  
 No — only **240 / 270 / 300** tiers earn **+1 point per machine**.
 

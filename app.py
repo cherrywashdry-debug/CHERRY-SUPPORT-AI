@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TWO-STAGE-V9-LANG-KM"
+VERSION = "CHERRY STAFF AI - TWO-STAGE-V10-PRICING-KB"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
@@ -51,6 +51,18 @@ _PROMPT_TO_CASE: dict[int, dict[str, Any]] = {}
 FALLBACK_EN = (
     "Thank you for contacting CHERRY Wash & Dry. Our staff will assist you shortly."
 )
+
+# Compact pricing — always injected so the model cannot miss locked V3 prices.
+CHERRY_PRICING_CORE = """
+CHERRY locked package prices (Baht per MACHINE — NOT per piece, NOT per kg, NOT by clothing amount):
+- 14 kg standard: 210 B (0 reward points)
+- 14 kg premium: 240 B (+1 point per machine)
+- 18 kg: 270 B (+1 point per machine)
+- 18 kg + extra dry 30 min: 300 B (+1 point per machine)
+Even a small/little amount of laundry uses one full machine package (minimum 210 B for 14 kg).
+Delivery fee is separate (not package price): free <1 km; 10 B (1–2.5 km); 20 B (2.5–3 km); 50 B (3–4 km); 70 B (>4 km).
+Shop open 24h. Pickup/delivery hours 09:30–00:00.
+"""
 
 
 @dataclass
@@ -309,6 +321,45 @@ def language_hints_for_text(text: str) -> list[str]:
     return hints
 
 
+def message_topic_hints(text: str) -> list[str]:
+    """Topic clues so replies use CHERRY pricing/rules when relevant."""
+    hints: list[str] = []
+    lower = str(text or "").lower()
+    if not lower.strip():
+        return hints
+
+    price_words = (
+        "price", "mahal", "murah", "berapa", "harga", "magkano", "gia", "cost",
+        "how much", "เท่าไหร", "ราคา", "多少钱", "价格", "point", "reward", "แต้ม",
+        "210", "240", "270", "300", "baht", "bath",
+    )
+    qty_words = (
+        "sedikit", "hanya", "little", "bit", "few", "small", "not much", "only a",
+        "តិច", "น้อย", "ไม่เยอะ", "ไม่มาก", "sedikit loh", "cuma", "hanya sedikit",
+    )
+    package_words = ("14", "18", "kg", "kilogram", "bag", "mesin", "machine", "package", "paket")
+    delivery_words = ("delivery", "pickup", "pick up", "antar", "kirim", "ส่ง", "รับ")
+    hours_words = ("open", "hours", "buka", "เสร็จ", "ready", "sabay", "nov", "when")
+
+    if any(w in lower for w in price_words):
+        hints.append(
+            "PRICE question — if staff asks for reply later, use exact package prices. "
+            "In staff_meaning, note what price/package info staff should know (simple Khmer)."
+        )
+    if any(w in lower for w in qty_words):
+        hints.append(
+            "SMALL/LITTLE quantity — customer may think price depends on amount. "
+            "staff_meaning MUST note: CHERRY charges per machine (210/240/270/300 B), not by clothing qty."
+        )
+    if any(w in lower for w in package_words) and not any(w in lower for w in price_words):
+        hints.append("Package/size topic — mention 14 kg vs 18 kg options when relevant.")
+    if any(w in lower for w in delivery_words):
+        hints.append("Delivery topic — delivery fee tiers may apply.")
+    if any(w in lower for w in hours_words):
+        hints.append("Timing/hours topic — shop open 24h; pickup 09:30–00:00.")
+    return hints
+
+
 def build_understand_system_prompt() -> str:
     return (
         "You are CHERRY Wash & Dry Poipet staff assistant.\n"
@@ -330,10 +381,12 @@ def build_understand_system_prompt() -> str:
         "    Write like explaining to a shop auntie: simple words, direct, easy to understand.\n"
         "    Start with អតិថិជន when possible. Say what they want / ask / complain about.\n"
         "    If the message is vague, say the most likely meaning simply (e.g. អតិថិជនប្រហែល...).\n"
-        "    No prices, policies, or suggested reply.\n\n"
+        "    If price/quantity/small-amount topic: add ONE short Khmer line with relevant CHERRY price rule.\n"
+        "    Do NOT draft a full customer reply.\n\n"
+        f"{CHERRY_PRICING_CORE}\n"
         "Examples:\n"
-        '  "Kok mahal ya ka" → tl, Tagalog, "អតិថិជនសួរថាហេវហេតុថ្លៃ"\n'
-        '  "Ini hanya sedikit loh" → id, Indonesian, "អតិថិជនមានតិចប៉ុណ្ណោះ / មិនមែនច្រើន"\n'
+        '  "Kok mahal ya ka" → tl, Tagalog, "អតិថិជនសួរថាហេវហេតុថ្លៃ — តម្លៃតាមម៉ាស៊ីន 210-300฿"\n'
+        '  "Ini hanya sedikit loh" → id, Indonesian, "អតិថិជនមានអាវតិច — តម្លៃតាមម៉ាស៊ីន 210฿+ មិនមែនតាមចំនួន"\n'
         '  "เสร็จยัง" → th, Thai, "អតិថិជនសួរថារួចហើយឬនៅ"\n'
         '  "18kg price?" → en, English, "អតិថិជនសួរតម្លៃ 18kg"\n'
         '  "sabay nov" → km, Khmer, "អតិថិជនសួរថារួចហើយឬនៅ (ខ្មែរ)"\n'
@@ -341,10 +394,12 @@ def build_understand_system_prompt() -> str:
 
 
 def build_understand_user_prompt(customer_text: str) -> str:
-    hints = language_hints_for_text(customer_text)
+    lang_hints = language_hints_for_text(customer_text)
+    topic_hints = message_topic_hints(customer_text)
+    all_hints = lang_hints + topic_hints
     hint_block = ""
-    if hints:
-        hint_block = "Detection hints (use as clues, not absolute):\n" + "\n".join(f"- {h}" for h in hints) + "\n\n"
+    if all_hints:
+        hint_block = "Hints:\n" + "\n".join(f"- {h}" for h in all_hints) + "\n\n"
     return (
         f"{hint_block}"
         f"Customer message (may be incomplete):\n{customer_text.strip() or '(empty)'}\n\n"
@@ -355,15 +410,18 @@ def build_understand_user_prompt(customer_text: str) -> str:
 def build_reply_system_prompt(knowledge: str) -> str:
     return (
         "You are CHERRY Wash & Dry Poipet staff assistant.\n"
-        "Use ONLY facts from the knowledge base below. Never invent prices or policies.\n"
-        "Never promise refunds, compensation, point changes, or verified order status.\n\n"
-        "Return a single JSON object with exactly these keys:\n"
-        "  staff_meaning — 1–2 SHORT lines in Khmer script ONLY (simple words for shop staff). Never Thai.\n"
-        "  customer_reply — SHORT reply in the CUSTOMER'S LANGUAGE specified in the user message\n"
-        "  CRITICAL: customer_reply must NOT be in Khmer or Thai unless the customer language IS Khmer/Thai.\n"
-        "  Style: casual chat, 1–3 short lines max, easy to copy.\n"
-        "  Answer only what they asked. No filler closings.\n\n"
-        "Knowledge base:\n"
+        "Use ONLY facts from CHERRY_PRICING_CORE and the knowledge base below.\n"
+        "Never invent prices, promotions, or policies. Never promise refunds or point changes.\n\n"
+        f"{CHERRY_PRICING_CORE}\n"
+        "Reply rules:\n"
+        "- customer_reply: SHORT, casual, in the customer's language — easy to copy-paste.\n"
+        "- If customer asks price OR mentions little/small amount (sedikit/hanya/mahal/etc.):\n"
+        "  MUST state relevant package price(s) and that CHERRY charges per MACHINE, not by clothing qty.\n"
+        "- staff_meaning: 1–2 simple Khmer lines for shop staff — include price rule when relevant.\n"
+        "- Never use Khmer/Thai in customer_reply unless that IS the customer language.\n"
+        "- No filler closings. Include facts staff need — do NOT give vague 'we can help' without prices.\n\n"
+        "Return JSON keys: staff_meaning, customer_reply\n\n"
+        "Full knowledge base:\n"
         f"{knowledge}"
     )
 
@@ -397,24 +455,29 @@ def build_reply_user_prompt(
         f"Write customer_reply ONLY in {lang_name}. "
         "Never use Khmer or Thai in customer_reply unless that IS the customer language.\n\n"
     )
+    topic_hints = message_topic_hints(customer_text)
+    topic_block = ""
+    if topic_hints:
+        topic_block = "Topic hints:\n" + "\n".join(f"- {h}" for h in topic_hints) + "\n\n"
     if mode == "shorter":
         return (
-            f"{meaning_block}{language_block}"
+            f"{meaning_block}{language_block}{topic_block}"
             f"Customer message:\n{customer_text}\n\n"
             f"Make customer_reply MUCH shorter in {lang_name} — max 15 words.\n"
+            f"Keep any required price facts from CHERRY_PRICING_CORE.\n"
             f"Previous customer_reply:\n{previous_reply}"
         )
     if mode == "rewrite":
         return (
-            f"{meaning_block}{language_block}"
+            f"{meaning_block}{language_block}{topic_block}"
             f"Customer message:\n{customer_text}\n\n"
-            f"Rewrite customer_reply in {lang_name} with different wording. Same facts, same brevity.\n"
+            f"Rewrite customer_reply in {lang_name} with different wording. Same facts and prices.\n"
             f"Previous customer_reply:\n{previous_reply}"
         )
     return (
-        f"{meaning_block}{language_block}"
+        f"{meaning_block}{language_block}{topic_block}"
         f"Customer message:\n{customer_text}\n\n"
-        f"Draft a short customer-safe reply in {lang_name} for staff to copy-paste."
+        f"Draft a short customer-safe reply in {lang_name} using CHERRY locked prices when relevant."
     )
 
 
@@ -445,7 +508,7 @@ def understanding_from_payload(payload: dict[str, Any]) -> StaffUnderstanding:
 
 def reply_from_payload(payload: dict[str, Any], *, mode: str = "normal") -> StaffReplyDraft:
     max_words = 15 if mode == "shorter" else 40
-    max_chars = 120 if mode == "shorter" else 280
+    max_chars = 120 if mode == "shorter" else 320
     meaning = str(
         payload.get("staff_meaning")
         or payload.get("staff_layer_km")
@@ -509,7 +572,7 @@ def draft_customer_reply(
     try:
         response = client.chat.completions.create(
             model=model,
-            temperature=0.3 if mode == "normal" else 0.5,
+            temperature=0.2 if mode == "normal" else 0.4,
             max_tokens=max_tokens,
             response_format={"type": "json_object"},
             messages=[
