@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TWO-STAGE-V6-COPY-BTN"
+VERSION = "CHERRY STAFF AI - TWO-STAGE-V7-KM-BUTTONS"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
@@ -639,10 +639,10 @@ def format_staff_translation_card(
 def stage1_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("📝 Help Reply", callback_data="staffai:help"),
-            InlineKeyboardButton("✍️ Staff Reply", callback_data="staffai:staff_reply"),
+            InlineKeyboardButton("📝 Help Reply / ជួយឆ្លើយ", callback_data="staffai:help"),
+            InlineKeyboardButton("✍️ Staff Reply / បុគ្គលិកឆ្លើយ", callback_data="staffai:staff_reply"),
         ],
-        [InlineKeyboardButton("❌ Cancel", callback_data="staffai:cancel")],
+        [InlineKeyboardButton("❌ Cancel / បោះបង់", callback_data="staffai:cancel")],
     ])
 
 
@@ -658,20 +658,22 @@ def copy_text_for_button(text: str, *, max_len: int = 256) -> str:
 def stage2_keyboard(*, copy_text: str = "", show_send: bool = False) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
         [
-            InlineKeyboardButton("🔄 Rewrite", callback_data="staffai:rewrite"),
-            InlineKeyboardButton("✂️ Shorter", callback_data="staffai:shorter"),
+            InlineKeyboardButton("🔄 Rewrite / សរសេរឡើងវិញ", callback_data="staffai:rewrite"),
+            InlineKeyboardButton("✂️ Shorter / ខ្លីជាង", callback_data="staffai:shorter"),
         ],
     ]
     if copy_text.strip():
         rows.append([
             InlineKeyboardButton(
-                "📋 Copy",
+                "📋 Copy / ចម្លង",
                 copy_text=CopyTextButton(text=copy_text_for_button(copy_text)),
             ),
         ])
     if show_send:
-        rows.append([InlineKeyboardButton("✅ Send to Customer", callback_data="staffai:send")])
-    rows.append([InlineKeyboardButton("❌ Cancel", callback_data="staffai:cancel_reply")])
+        rows.append([
+            InlineKeyboardButton("✅ Send to Customer / ផ្ញើទៅអតិថិជន", callback_data="staffai:send"),
+        ])
+    rows.append([InlineKeyboardButton("❌ Cancel / បោះបង់", callback_data="staffai:cancel_reply")])
     return InlineKeyboardMarkup(rows)
 
 
