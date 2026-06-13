@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TRANSLATOR-V1"
+VERSION = "CHERRY STAFF AI - TRANSLATOR-V2-KM-MEANING"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
@@ -349,13 +349,13 @@ def build_understand_system_prompt() -> str:
         "Return a single JSON object with exactly these keys:\n"
         "  detected_language — best short code (en, th, km, id, tl, ms, zh, vi, ...)\n"
         "  language_name — clear name staff can read (e.g. Tagalog, Indonesian, Khmer)\n"
-        "  staff_meaning — 1–2 SHORT lines in Khmer OR Thai for staff to read.\n"
-        "    Simple words only. Say what the customer wants / asks / complains about.\n"
+        "  staff_meaning — 1–2 SHORT lines in Khmer script ONLY (ភាសាខ្មែរ). Never Thai.\n"
+        "    Simple words for shop staff. Start with អតិថិជន when possible.\n"
         "    Do NOT draft a customer reply. Do NOT add shop prices unless customer asked.\n\n"
         "Examples:\n"
         '  "Kok mahal ya ka" → tl, Tagalog, "ลูกค้าถามว่าทำไมแพง" or "អតិថិជនសួរថាហេវហេតុថ្លៃ"\n'
-        '  "Ini hanya sedikit loh" → id, Indonesian, "ลูกค้าบอกว่ามีน้อย" or "អតិថិជនមានអាវតិច"\n'
-        '  "เสร็จยัง" → th, Thai, "ลูกค้าถามว่าเสร็จหรือยัง"\n'
+        '  "Ini hanya sedikit loh" → id, Indonesian, "អតិថិជនមានអាវតិច"\n'
+        '  "เสร็จยัง" → th, Thai, "អតិថិជនសួរថារួចហើយឬនៅ"\n'
     )
 
 
@@ -369,7 +369,7 @@ def build_understand_user_prompt(customer_text: str) -> str:
     return (
         f"{hint_block}"
         f"Customer message (may be incomplete):\n{customer_text.strip() or '(empty)'}\n\n"
-        "Detect the most likely customer language and explain the meaning in simple Khmer or Thai."
+        "Detect the most likely customer language and explain the meaning in simple Khmer for staff."
     )
 
 
@@ -411,7 +411,7 @@ def understanding_from_payload(payload: dict[str, Any]) -> StaffUnderstanding:
 
 
 def draft_staff_reply_meaning(*, staff_wrote: str, customer_reply: str) -> str:
-    """Khmer or Thai summary of what will be sent to the customer."""
+    """Khmer-only summary of what will be sent to the customer."""
     client = openai_client()
     if not client:
         return "—"
@@ -426,9 +426,9 @@ def draft_staff_reply_meaning(*, staff_wrote: str, customer_reply: str) -> str:
                 {
                     "role": "system",
                     "content": (
-                        "Explain for shop staff in Khmer OR Thai ONLY (1-2 short lines).\n"
+                        "Explain for Cambodian shop staff in Khmer script ONLY (1-2 short lines).\n"
                         "Summarize what the customer_reply will tell the customer.\n"
-                        "Do NOT use Indonesian, English, or Malay."
+                        "NEVER use Thai, Indonesian, English, or Malay."
                     ),
                 },
                 {
@@ -443,7 +443,7 @@ def draft_staff_reply_meaning(*, staff_wrote: str, customer_reply: str) -> str:
         )
         raw = response.choices[0].message.content or "{}"
         meaning = str(parse_llm_json(raw).get("staff_meaning", "") or "").strip()
-        if looks_like_staff_language(meaning):
+        if looks_like_khmer(meaning):
             return meaning
     except Exception:
         logger.exception("Staff reply meaning repair failed")
@@ -451,7 +451,7 @@ def draft_staff_reply_meaning(*, staff_wrote: str, customer_reply: str) -> str:
 
 
 def ensure_staff_reply_meaning(draft: StaffTranslationDraft) -> StaffTranslationDraft:
-    if looks_like_staff_language(draft.staff_meaning):
+    if looks_like_khmer(draft.staff_meaning):
         return draft
     repaired = draft_staff_reply_meaning(
         staff_wrote=draft.staff_wrote,
@@ -495,7 +495,7 @@ def build_translate_system_prompt() -> str:
         "You do NOT answer for staff. You do NOT add shop knowledge.\n\n"
         "RULES:\n"
         "- translated_reply: target customer language ONLY. Short, natural, easy to copy.\n"
-        "- staff_meaning: 1-2 short lines in Khmer OR Thai — what customer will receive.\n"
+        "- staff_meaning: 1-2 short lines in Khmer script ONLY — what customer will receive.\n"
         "- Do NOT invent information.\n"
         "- Do NOT add price, time, policy, or promise unless staff wrote it.\n"
         "- Only clean grammar/tone and translate. Keep the same meaning as staff wrote.\n"
@@ -527,7 +527,7 @@ def build_translate_user_prompt(
             f"Staff wrote:\n{staff_text}\n\n"
             f"Make translated_reply MUCH shorter in {language_name} — max 12 words.\n"
             f"Same meaning only — do not add new facts.\n"
-            f"Update staff_meaning in Khmer or Thai.\n"
+            f"Update staff_meaning in Khmer script only.\n"
             f"Previous translated_reply:\n{previous_reply}"
         )
     if mode == "rewrite":
@@ -535,13 +535,13 @@ def build_translate_user_prompt(
             f"{context_block}{target}{lang_rule}"
             f"Staff wrote:\n{staff_text}\n\n"
             f"Rewrite translated_reply in {language_name}. Same meaning — no new facts.\n"
-            f"Update staff_meaning in Khmer or Thai.\n"
+            f"Update staff_meaning in Khmer script only.\n"
             f"Previous translated_reply:\n{previous_reply}"
         )
     return (
         f"{context_block}{target}{lang_rule}"
         f"Staff wrote:\n{staff_text}\n\n"
-        f"Translate and lightly clean to {language_name}. staff_meaning in Khmer or Thai."
+        f"Translate and lightly clean to {language_name}. staff_meaning in Khmer script only."
     )
 
 
@@ -669,7 +669,7 @@ def format_reply_check_card(draft: StaffTranslationDraft, *, mode_label: str = "
     return "\n".join([
         header,
         "",
-        "👀 Staff Meaning",
+        "👀 Staff Meaning / សម្រាប់បុគ្គលិក",
         draft.staff_meaning or "—",
         "",
         "💬 Customer Reply",
