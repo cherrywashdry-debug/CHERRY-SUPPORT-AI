@@ -38,15 +38,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TRANSLATOR-V3-STAFF-REPLY-FIX"
+VERSION = "CHERRY STAFF AI - TRANSLATOR-V4-STAFF-REPLY-INTERCEPT"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
 if not KNOWLEDGE_PATH.is_file():
     KNOWLEDGE_PATH = ROOT.parent / "CHERRY_KNOWLEDGE.md"
 ACTIVE_CASE_KEY = "staff_ai_active_case"
+STAFF_REPLY_GATE_KEY = "staff_ai_reply_gate"
+STAFF_REPLY_HANDLED_MSG_KEY = "staff_ai_handled_message_id"
 # In-memory fallback between webhook requests (same process).
 _AWAITING_STAFF_REPLY: dict[str, dict[str, Any]] = {}
+_STAFF_REPLY_GATE: dict[str, dict[str, Any]] = {}
 _PROMPT_TO_CASE: dict[int, dict[str, Any]] = {}
 
 FALLBACK_EN = (
@@ -103,10 +106,26 @@ def normalize_case(case: dict[str, Any], *, chat_id: int | None = None) -> dict[
     return payload
 
 
+def _coerce_user_id(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _same_user(stored_id: Any, user_id: int) -> bool:
+    left = _coerce_user_id(stored_id)
+    right = _coerce_user_id(user_id)
+    return left is not None and right is not None and left == right
+
+
 def case_is_staff_reply_wait(case: dict[str, Any], *, user_id: int) -> bool:
-    return bool(case.get("staff_reply_mode") or case.get("awaiting_staff_reply")) and (
-        case.get("staff_reply_user_id") == user_id
-    )
+    if not bool(case.get("staff_reply_mode") or case.get("awaiting_staff_reply")):
+        return False
+    stored_uid = case.get("staff_reply_user_id")
+    if stored_uid is None:
+        return True
+    return _same_user(stored_uid, user_id)
 
 
 def looks_like_staff_language(text: str) -> bool:
@@ -831,21 +850,56 @@ def show_send_button(stored: dict[str, Any]) -> bool:
 
 
 def _await_key(chat_id: int, user_id: int) -> str:
-    return f"{chat_id}:{user_id}"
+    return f"{int(chat_id)}:{int(user_id)}"
 
 
-def set_awaiting_staff_reply(chat_id: int, user_id: int, case: dict[str, Any]) -> dict[str, Any]:
+def _reply_gate(context: ContextTypes.DEFAULT_TYPE) -> dict[str, Any]:
+    return context.application.bot_data.setdefault(STAFF_REPLY_GATE_KEY, {})
+
+
+def _set_reply_gate(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    user_id: int,
+    case: dict[str, Any],
+) -> None:
+    key = _await_key(chat_id, user_id)
+    payload = dict(case)
+    _STAFF_REPLY_GATE[key] = payload
+    _reply_gate(context)[key] = payload
+
+
+def _pop_reply_gate(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    user_id: int,
+) -> None:
+    key = _await_key(chat_id, user_id)
+    _STAFF_REPLY_GATE.pop(key, None)
+    _reply_gate(context).pop(key, None)
+
+
+def set_awaiting_staff_reply(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    user_id: int,
+    case: dict[str, Any],
+) -> dict[str, Any]:
     payload = normalize_case(case, chat_id=chat_id)
     payload["staff_reply_mode"] = True
     payload["awaiting_staff_reply"] = True
-    payload["staff_reply_user_id"] = user_id
-    _AWAITING_STAFF_REPLY[_await_key(chat_id, user_id)] = payload
+    payload["staff_reply_user_id"] = int(user_id)
+    payload["active_support_id"] = payload.get("support_id")
+    key = _await_key(chat_id, user_id)
+    _AWAITING_STAFF_REPLY[key] = payload
+    _set_reply_gate(context, chat_id, user_id, payload)
     logger.info(
-        "staff_reply_mode ON chat=%s user=%s support_id=%s lang=%s",
+        "STAFF_REPLY_MODE_ENTER chat=%s user=%s support_id=%s lang=%s gate=%s",
         chat_id,
         user_id,
         payload.get("support_id"),
         payload.get("language_name"),
+        key,
     )
     return payload
 
@@ -855,8 +909,15 @@ def get_awaiting_staff_reply(chat_id: int, user_id: int) -> dict[str, Any] | Non
     return dict(pending) if isinstance(pending, dict) else None
 
 
-def clear_awaiting_staff_reply(chat_id: int, user_id: int) -> None:
-    _AWAITING_STAFF_REPLY.pop(_await_key(chat_id, user_id), None)
+def clear_awaiting_staff_reply(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    user_id: int,
+) -> None:
+    key = _await_key(chat_id, user_id)
+    _AWAITING_STAFF_REPLY.pop(key, None)
+    _STAFF_REPLY_GATE.pop(key, None)
+    _reply_gate(context).pop(key, None)
 
 
 def clear_awaiting_for_chat(chat_id: int) -> None:
@@ -872,7 +933,7 @@ def bind_staff_reply_wait(
     user_id: int,
     case: dict[str, Any],
 ) -> dict[str, Any]:
-    payload = set_awaiting_staff_reply(chat_id, user_id, case)
+    payload = set_awaiting_staff_reply(context, chat_id, user_id, case)
     context.user_data["staff_ai_awaiting"] = True
     context.user_data["staff_ai_case"] = payload
     awaiting = context.application.bot_data.setdefault("staff_ai_awaiting", {})
@@ -887,12 +948,15 @@ def clear_staff_reply_wait(
     user_id: int,
     *,
     prompt_id: int | None = None,
+    log_exit: bool = True,
 ) -> None:
-    clear_awaiting_staff_reply(chat_id, user_id)
+    key = _await_key(chat_id, user_id)
+    gate_case = _STAFF_REPLY_GATE.get(key) or _reply_gate(context).get(key)
+    clear_awaiting_staff_reply(context, chat_id, user_id)
     context.user_data.pop("staff_ai_awaiting", None)
     context.user_data.pop("staff_ai_case", None)
     awaiting = context.application.bot_data.get("staff_ai_awaiting", {})
-    awaiting.pop(_await_key(chat_id, user_id), None)
+    awaiting.pop(key, None)
     if prompt_id is not None:
         _PROMPT_TO_CASE.pop(prompt_id, None)
         context.application.bot_data.get("staff_ai_prompts", {}).pop(str(prompt_id), None)
@@ -903,6 +967,61 @@ def clear_staff_reply_wait(
         stored["awaiting_staff_reply"] = False
         stored["staff_reply_user_id"] = None
         save_active_case(context, stored, chat_id=chat_id)
+    if log_exit:
+        logger.info(
+            "STAFF_REPLY_MODE_EXIT chat=%s user=%s support_id=%s",
+            chat_id,
+            user_id,
+            (gate_case or {}).get("support_id"),
+        )
+
+
+def find_staff_reply_case(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    user_id: int,
+) -> dict[str, Any] | None:
+    key = _await_key(chat_id, user_id)
+
+    gate = _STAFF_REPLY_GATE.get(key)
+    if isinstance(gate, dict) and case_is_staff_reply_wait(gate, user_id=user_id):
+        logger.info("staff reply gate=memory support_id=%s", gate.get("support_id"))
+        return dict(gate)
+
+    persisted_gate = _reply_gate(context).get(key)
+    if isinstance(persisted_gate, dict) and case_is_staff_reply_wait(persisted_gate, user_id=user_id):
+        logger.info("staff reply gate=bot_data support_id=%s", persisted_gate.get("support_id"))
+        return dict(persisted_gate)
+
+    pending = get_awaiting_staff_reply(chat_id, user_id)
+    if pending and case_is_staff_reply_wait(pending, user_id=user_id):
+        logger.info("staff reply gate=awaiting support_id=%s", pending.get("support_id"))
+        return pending
+
+    bot_awaiting = context.application.bot_data.get("staff_ai_awaiting", {})
+    mem = bot_awaiting.get(key)
+    if isinstance(mem, dict) and case_is_staff_reply_wait(mem, user_id=user_id):
+        logger.info("staff reply gate=bot_awaiting support_id=%s", mem.get("support_id"))
+        return dict(mem)
+
+    stored = context.chat_data.get(ACTIVE_CASE_KEY)
+    if isinstance(stored, dict) and case_is_staff_reply_wait(stored, user_id=user_id):
+        logger.info("staff reply gate=chat_data support_id=%s", stored.get("support_id"))
+        return dict(stored)
+
+    by_chat = context.application.bot_data.get("staff_ai_by_chat", {})
+    chat_case = by_chat.get(str(chat_id))
+    if isinstance(chat_case, dict) and case_is_staff_reply_wait(chat_case, user_id=user_id):
+        logger.info("staff reply gate=by_chat support_id=%s", chat_case.get("support_id"))
+        return dict(chat_case)
+
+    if context.user_data.get("staff_ai_awaiting") and isinstance(context.user_data.get("staff_ai_case"), dict):
+        case = dict(context.user_data["staff_ai_case"])
+        if case_is_staff_reply_wait(case, user_id=user_id):
+            logger.info("staff reply gate=user_data support_id=%s", case.get("support_id"))
+            return case
+
+    return None
 
 
 def resolve_pending_staff_case(
@@ -935,39 +1054,7 @@ def resolve_pending_staff_case(
             logger.info("staff reply matched persisted prompt user=%s", user.id)
             return dict(mem)
 
-    stored = context.chat_data.get(ACTIVE_CASE_KEY)
-    if isinstance(stored, dict) and case_is_staff_reply_wait(stored, user_id=user.id):
-        logger.info(
-            "staff reply matched chat_data user=%s support_id=%s",
-            user.id,
-            stored.get("support_id"),
-        )
-        return dict(stored)
-
-    by_chat = context.application.bot_data.get("staff_ai_by_chat", {})
-    chat_case = by_chat.get(str(chat.id))
-    if isinstance(chat_case, dict) and case_is_staff_reply_wait(chat_case, user_id=user.id):
-        logger.info("staff reply matched bot_data chat case user=%s", user.id)
-        return dict(chat_case)
-
-    pending = get_awaiting_staff_reply(chat.id, user.id)
-    if pending and case_is_staff_reply_wait(pending, user_id=user.id):
-        logger.info("staff reply matched memory user=%s", user.id)
-        return pending
-
-    bot_awaiting = context.application.bot_data.get("staff_ai_awaiting", {})
-    mem = bot_awaiting.get(_await_key(chat.id, user.id))
-    if isinstance(mem, dict) and case_is_staff_reply_wait(mem, user_id=user.id):
-        logger.info("staff reply matched bot_data user=%s", user.id)
-        return dict(mem)
-
-    if context.user_data.get("staff_ai_awaiting") and isinstance(context.user_data.get("staff_ai_case"), dict):
-        case = dict(context.user_data["staff_ai_case"])
-        if case_is_staff_reply_wait(case, user_id=user.id):
-            logger.info("staff reply matched user_data user=%s", user.id)
-            return case
-
-    return None
+    return find_staff_reply_case(context, chat.id, user.id)
 
 
 def save_active_case(
@@ -981,11 +1068,11 @@ def save_active_case(
     context.chat_data[ACTIVE_CASE_KEY] = payload
     if isinstance(cid, int):
         context.application.bot_data.setdefault("staff_ai_by_chat", {})[str(cid)] = payload
-    uid = payload.get("staff_reply_user_id")
-    if payload.get("staff_reply_mode") and isinstance(cid, int) and isinstance(uid, int):
-        context.application.bot_data.setdefault("staff_ai_awaiting", {})[
-            _await_key(cid, uid)
-        ] = payload
+    uid = _coerce_user_id(payload.get("staff_reply_user_id"))
+    if payload.get("staff_reply_mode") and isinstance(cid, int) and uid is not None:
+        key = _await_key(cid, uid)
+        context.application.bot_data.setdefault("staff_ai_awaiting", {})[key] = payload
+        _set_reply_gate(context, cid, uid, payload)
 
 
 async def process_staff_reply_input(
@@ -1004,6 +1091,16 @@ async def process_staff_reply_input(
 
     chat = update.effective_chat
     user = update.effective_user
+    support_id = stored.get("support_id")
+    logger.info(
+        "STAFF_REPLY_INPUT_RECEIVED chat=%s user=%s support_id=%s text=%r lang=%s",
+        getattr(chat, "id", None),
+        getattr(user, "id", None),
+        support_id,
+        staff_text[:120],
+        stored.get("language_name"),
+    )
+
     stored = dict(stored)
     stored["staff_reply_mode"] = False
     stored["awaiting_staff_reply"] = False
@@ -1018,9 +1115,10 @@ async def process_staff_reply_input(
             chat.id,
             user.id,
             prompt_id=int(prompt_id) if prompt_id else None,
+            log_exit=False,
         )
 
-    customer_lang = str(stored.get("detected_language", "") or "")
+    customer_lang = str(stored.get("detected_language", "") or stored.get("detected_customer_language", "") or "")
     customer_lang_name = str(stored.get("language_name", "") or "Unknown")
     customer_original = str(
         stored.get("original_customer_message", "") or stored.get("question", "") or ""
@@ -1035,12 +1133,25 @@ async def process_staff_reply_input(
             language_name=customer_lang_name,
             customer_original=customer_original,
         )
+        logger.info(
+            "STAFF_REPLY_TRANSLATED support_id=%s customer_lang=%s reply=%r",
+            support_id,
+            customer_lang_name,
+            draft.customer_reply[:120],
+        )
         stored["customer_reply"] = draft.customer_reply
         stored["staff_reply_meaning"] = draft.staff_meaning
         card = format_reply_check_card(draft)
         await send_stage2_reply(message=message, context=context, stored=stored, card=card)
+        if chat and user:
+            logger.info(
+                "STAFF_REPLY_MODE_EXIT chat=%s user=%s support_id=%s",
+                chat.id,
+                user.id,
+                support_id,
+            )
     except Exception:
-        logger.exception("staff reply translation failed")
+        logger.exception("staff reply translation failed support_id=%s", support_id)
         await message.reply_text("⚠️ Could not translate. Try again or send /health.")
 
 
@@ -1092,7 +1203,34 @@ async def send_stage2_reply(
     save_active_case(context, stored, chat_id=stored.get("chat_id"))
 
 
-async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def intercept_staff_reply_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Group 0 — must run before customer message handler."""
+    if not is_staff_chat(update):
+        return
+    message = update.effective_message
+    user = update.effective_user
+    chat = update.effective_chat
+    if not message or not message.text or not user or not chat:
+        return
+    raw_text = message.text.strip()
+    if raw_text.startswith("/"):
+        return
+
+    pending = resolve_pending_staff_case(update, context)
+    if not pending:
+        return
+
+    context.chat_data[STAFF_REPLY_HANDLED_MSG_KEY] = message.message_id
+    await process_staff_reply_input(
+        update,
+        context,
+        stored=pending,
+        staff_text=raw_text,
+    )
+
+
+async def handle_customer_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Group 1 — new customer paste only; never runs while staff_reply_mode is active."""
     if not is_staff_chat(update):
         return
     message = update.effective_message
@@ -1107,29 +1245,18 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
 
     user = update.effective_user
     chat = update.effective_chat
-
-    pending = resolve_pending_staff_case(update, context)
-    if pending:
-        await process_staff_reply_input(
-            update,
-            context,
-            stored=pending,
-            staff_text=raw_text.strip(),
-        )
+    if not user or not chat:
         return
 
-    chat = update.effective_chat
-    stored_case = context.chat_data.get(ACTIVE_CASE_KEY)
-    if (
-        isinstance(stored_case, dict)
-        and user
-        and case_is_staff_reply_wait(stored_case, user_id=user.id)
-    ):
-        await process_staff_reply_input(
-            update,
-            context,
-            stored=dict(stored_case),
-            staff_text=raw_text.strip(),
+    if context.chat_data.get(STAFF_REPLY_HANDLED_MSG_KEY) == message.message_id:
+        context.chat_data.pop(STAFF_REPLY_HANDLED_MSG_KEY, None)
+        return
+
+    if find_staff_reply_case(context, chat.id, user.id):
+        logger.warning(
+            "blocked customer handler — staff_reply_mode still active chat=%s user=%s",
+            chat.id,
+            user.id,
         )
         return
 
@@ -1143,13 +1270,10 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
 
     logger.info(
         "stage1 chat=%s user=%s text=%r",
-        getattr(chat, "id", None),
-        getattr(user, "id", None),
+        chat.id,
+        user.id,
         text[:120],
     )
-
-    if chat and user:
-        clear_staff_reply_wait(context, chat.id, user.id)
 
     try:
         await message.chat.send_action("typing")
@@ -1166,10 +1290,10 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
                 order_id=order_id,
                 stage1_message_id=sent.message_id,
             ),
-            chat_id=chat.id if chat else None,
+            chat_id=chat.id,
         )
     except Exception:
-        logger.exception("handle_staff_message failed for text=%r", text[:120])
+        logger.exception("handle_customer_message failed for text=%r", text[:120])
         await message.reply_text(
             "⚠️ Could not read message. Send /health to check OpenAI, then try again."
         )
@@ -1183,6 +1307,10 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     action = (query.data or "").split(":", 1)[-1]
     stored = context.chat_data.get(ACTIVE_CASE_KEY)
+    if not isinstance(stored, dict):
+        by_chat = context.application.bot_data.get("staff_ai_by_chat", {})
+        fallback = by_chat.get(str(query.message.chat_id))
+        stored = fallback if isinstance(fallback, dict) else None
     if not isinstance(stored, dict):
         await query.message.reply_text("Paste a customer message first.")
         return
@@ -1363,7 +1491,9 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("id", group_cmd))
     app.add_handler(CommandHandler("health", health_cmd))
     app.add_handler(CallbackQueryHandler(staff_ai_callback, pattern=r"^staffai:"))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_staff_message))
+    text_filter = filters.TEXT & ~filters.COMMAND
+    app.add_handler(MessageHandler(text_filter, intercept_staff_reply_input), group=0, block=False)
+    app.add_handler(MessageHandler(text_filter, handle_customer_message), group=1)
     return app
 
 
