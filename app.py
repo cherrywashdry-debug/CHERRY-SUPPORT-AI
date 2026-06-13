@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from telegram import ForceReply, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import CopyTextButton, ForceReply, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TWO-STAGE-V5-STAFF-REPLY-FIX"
+VERSION = "CHERRY STAFF AI - TWO-STAGE-V6-COPY-BTN"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
@@ -646,13 +646,29 @@ def stage1_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
-def stage2_keyboard(*, show_send: bool = False) -> InlineKeyboardMarkup:
+def copy_text_for_button(text: str, *, max_len: int = 256) -> str:
+    cleaned = str(text or "").strip()
+    if not cleaned:
+        return FALLBACK_EN
+    if len(cleaned) <= max_len:
+        return cleaned
+    return cleaned[: max_len - 1].rstrip() + "…"
+
+
+def stage2_keyboard(*, copy_text: str = "", show_send: bool = False) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
         [
             InlineKeyboardButton("🔄 Rewrite", callback_data="staffai:rewrite"),
             InlineKeyboardButton("✂️ Shorter", callback_data="staffai:shorter"),
         ],
     ]
+    if copy_text.strip():
+        rows.append([
+            InlineKeyboardButton(
+                "📋 Copy",
+                copy_text=CopyTextButton(text=copy_text_for_button(copy_text)),
+            ),
+        ])
     if show_send:
         rows.append([InlineKeyboardButton("✅ Send to Customer", callback_data="staffai:send")])
     rows.append([InlineKeyboardButton("❌ Cancel", callback_data="staffai:cancel_reply")])
@@ -943,7 +959,10 @@ async def send_stage2_reply(
 ) -> None:
     sent = await message.reply_text(
         card,
-        reply_markup=stage2_keyboard(show_send=show_send_button(stored)),
+        reply_markup=stage2_keyboard(
+            copy_text=str(stored.get("customer_reply", "") or ""),
+            show_send=show_send_button(stored),
+        ),
     )
     stored["reply_message_id"] = sent.message_id
     save_active_case(context, stored)
