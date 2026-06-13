@@ -9,5 +9,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py CHERRY_KNOWLEDGE.md ./
+RUN mkdir -p data
 
-CMD ["python", "app.py"]
+CMD ["python", "-u", "app.py"]

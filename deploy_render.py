@@ -71,7 +71,7 @@ def patch_service_docker(service_id: str) -> dict:
         "autoDeploy": "yes",
         "serviceDetails": {
             "runtime": "docker",
-            "healthCheckPath": "",
+            "healthCheckPath": "/health",
             "envSpecificDetails": {
                 "dockerfilePath": "./Dockerfile",
                 "dockerContext": ".",

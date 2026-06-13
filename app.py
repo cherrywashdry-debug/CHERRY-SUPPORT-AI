@@ -1670,13 +1670,24 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
             pass
 
 
+def build_persistence() -> PicklePersistence:
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if STATE_PATH.is_file():
+        try:
+            with open(STATE_PATH, "rb") as fh:
+                fh.read(16)
+        except OSError as exc:
+            logger.warning("Resetting unreadable bot state: %s", exc)
+            STATE_PATH.unlink(missing_ok=True)
+    return PicklePersistence(filepath=str(STATE_PATH))
+
+
 def build_app() -> Application:
     token = os.getenv("BOT_TOKEN", "").strip()
     if not token:
         raise RuntimeError("BOT_TOKEN is required")
 
-    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    persistence = PicklePersistence(filepath=str(STATE_PATH))
+    persistence = build_persistence()
 
     app = (
         Application.builder()
@@ -1704,7 +1715,11 @@ def main() -> None:
     logger.info("Starting %s", VERSION)
     if not KNOWLEDGE_PATH.is_file():
         logger.warning("Missing knowledge file at %s", KNOWLEDGE_PATH)
-    app = build_app()
+    try:
+        app = build_app()
+    except Exception:
+        logger.exception("build_app failed")
+        raise
     webhook_url = resolve_webhook_url()
     port = int(os.getenv("PORT", "8080"))
     if webhook_url:
@@ -1725,4 +1740,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        logger.exception("Fatal startup error")
+        raise
