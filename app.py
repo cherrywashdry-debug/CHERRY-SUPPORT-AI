@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TWO-STAGE-V8-KM-MEANING"
+VERSION = "CHERRY STAFF AI - TWO-STAGE-V9-LANG-KM"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
@@ -249,17 +249,106 @@ def extract_message_context(message: Any) -> tuple[str, int | None, str]:
     return text, telegram_id, order_id
 
 
+def language_hints_for_text(text: str) -> list[str]:
+    """Lightweight clues for LLM — helps with short/incomplete romanized messages."""
+    hints: list[str] = []
+    raw = str(text or "").strip()
+    lower = raw.lower()
+    if not lower:
+        return hints
+
+    if re.search(r"[\u1780-\u17FF]", raw):
+        hints.append("Khmer script present → likely Khmer (km).")
+    if re.search(r"[\u4e00-\u9fff]", raw):
+        hints.append("Chinese characters present → likely Chinese (zh).")
+    if re.search(r"[\u0E00-\u0E7F]", raw):
+        hints.append("Thai script present → likely Thai (th).")
+
+    id_markers = (
+        "loh", "dong", "gak", "nggak", "sedikit", "hanya", "berapa", "bisa",
+        "sudah", "belum", "tolong", "kapan", "mahal", "murah", "gimana", "kamu",
+    )
+    tl_markers = (
+        "po", "ba", "kayo", "bakit", "naman", "sila", "salamat", "pwede",
+        "magkano", "saan", "paano", "po ba", "lang po",
+    )
+    ms_markers = ("saya", "boleh", "tak", "macam", "bila", "nak", "berapa", "baju")
+    km_roman = (
+        "bong", "sabay", "som", "khom", "nov", "del", "tver", "luk", "ot",
+        "men", "ban", "pel", "som ot", "nov del",
+    )
+    en_markers = (
+        "the", "how", "what", "when", "price", "ready", "done", "please",
+        "thank", "hello", "hi", "my", "your", "can", "will",
+    )
+
+    id_hits = sum(1 for w in id_markers if re.search(rf"\b{re.escape(w)}\b", lower))
+    tl_hits = sum(1 for w in tl_markers if re.search(rf"\b{re.escape(w)}\b", lower))
+    ms_hits = sum(1 for w in ms_markers if re.search(rf"\b{re.escape(w)}\b", lower))
+    km_hits = sum(1 for w in km_roman if re.search(rf"\b{re.escape(w)}\b", lower))
+    en_hits = sum(1 for w in en_markers if re.search(rf"\b{re.escape(w)}\b", lower))
+
+    if id_hits >= 1 and "loh" in lower:
+        hints.append("Informal Indonesian marker 'loh' → lean Indonesian (id), not Khmer.")
+    if id_hits >= 2:
+        hints.append(f"Multiple Indonesian markers ({id_hits}) → likely Indonesian (id).")
+    if tl_hits >= 1 or (re.search(r"\bmahal\b", lower) and re.search(r"\b(ya|po|ba|lang)\b", lower)):
+        hints.append("Tagalog/Filipino patterns (mahal/po/ba/lang) → likely Tagalog (tl), NOT Khmer.")
+    if ms_hits >= 2 and id_hits == 0:
+        hints.append(f"Malay markers ({ms_hits}) → likely Malay (ms).")
+    if km_hits >= 1 and not re.search(r"[\u1780-\u17FF]", raw):
+        hints.append(f"Khmer romanization hints ({km_hits}) → possible Khmer (km).")
+    if en_hits >= 2 and not re.search(r"[\u1780-\u17FF\u0E00-\u0E7F\u4e00-\u9fff]", raw):
+        hints.append(f"English word patterns ({en_hits}) → likely English (en).")
+
+    if len(lower.split()) <= 4:
+        hints.append(
+            "Message is very short — infer language from word choice, spelling, and chat style; "
+            "do not default to Khmer unless evidence supports it."
+        )
+    return hints
+
+
 def build_understand_system_prompt() -> str:
     return (
         "You are CHERRY Wash & Dry Poipet staff assistant.\n"
-        "Staff are Cambodian. Staff pasted a customer message. Do NOT draft a customer reply.\n"
+        "Staff are Cambodian shop workers (easy Khmer only). They pasted a customer message.\n"
+        "Do NOT draft a customer reply.\n\n"
+        "CHALLENGE: messages are often SHORT, incomplete, typo-filled, or romanized (no native script).\n"
+        "Use context clues, common border-area chat patterns, and word choice to pick the BEST language.\n"
+        "Poipet customers often use: Khmer, Thai, English, Indonesian, Malay, Chinese, Tagalog, Vietnamese.\n\n"
+        "Language rules (do not confuse):\n"
+        "- Tagalog (tl): mahal, po, ba, lang, bakit, magkano, salamat — NOT Khmer.\n"
+        "- Indonesian (id): loh, dong, gak, sedikit, hanya, berapa, gimana — NOT Khmer.\n"
+        "- Malay (ms): saya, boleh, tak, nak, macam — similar to Indonesian; pick best fit.\n"
+        "- Khmer (km): Khmer script OR romanization like bong, sabay, som ot, nov del, luk.\n"
+        "- Thai (th): Thai script or romanized Thai particles.\n\n"
         "Return a single JSON object with exactly these keys:\n"
-        "  detected_language — accurate short code (en, th, km, id, zh, tl, ms, vi, ...)\n"
-        "  language_name — human-readable language name (e.g. Tagalog, Indonesian, Khmer)\n"
-        "  staff_meaning — ONE short line in Khmer script ONLY (ភាសាខ្មែរ). Never Thai.\n"
-        "Detect language carefully: Tagalog/Filipino (tl) uses words like mahal, po, lang, bakit — "
-        "NOT Khmer. Khmer (km) uses Khmer script or distinct Khmer romanization.\n"
-        "Keep staff_meaning under 80 characters. No prices, no suggested reply."
+        "  detected_language — best short code (en, th, km, id, tl, ms, zh, vi, ...)\n"
+        "  language_name — clear name staff can read (e.g. Tagalog, Indonesian, Khmer)\n"
+        "  staff_meaning — 1–2 SHORT lines in Khmer script ONLY. Never Thai.\n"
+        "    Write like explaining to a shop auntie: simple words, direct, easy to understand.\n"
+        "    Start with អតិថិជន when possible. Say what they want / ask / complain about.\n"
+        "    If the message is vague, say the most likely meaning simply (e.g. អតិថិជនប្រហែល...).\n"
+        "    No prices, policies, or suggested reply.\n\n"
+        "Examples:\n"
+        '  "Kok mahal ya ka" → tl, Tagalog, "អតិថិជនសួរថាហេវហេតុថ្លៃ"\n'
+        '  "Ini hanya sedikit loh" → id, Indonesian, "អតិថិជនមានតិចប៉ុណ្ណោះ / មិនមែនច្រើន"\n'
+        '  "เสร็จยัง" → th, Thai, "អតិថិជនសួរថារួចហើយឬនៅ"\n'
+        '  "18kg price?" → en, English, "អតិថិជនសួរតម្លៃ 18kg"\n'
+        '  "sabay nov" → km, Khmer, "អតិថិជនសួរថារួចហើយឬនៅ (ខ្មែរ)"\n'
+    )
+
+
+def build_understand_user_prompt(customer_text: str) -> str:
+    hints = language_hints_for_text(customer_text)
+    hint_block = ""
+    if hints:
+        hint_block = "Detection hints (use as clues, not absolute):\n" + "\n".join(f"- {h}" for h in hints) + "\n\n"
+    return (
+        f"{hint_block}"
+        f"Customer message (may be incomplete):\n{customer_text.strip() or '(empty)'}\n\n"
+        "Detect the most likely customer language and explain the meaning in simple Khmer for staff."
     )
 
 
@@ -269,7 +358,7 @@ def build_reply_system_prompt(knowledge: str) -> str:
         "Use ONLY facts from the knowledge base below. Never invent prices or policies.\n"
         "Never promise refunds, compensation, point changes, or verified order status.\n\n"
         "Return a single JSON object with exactly these keys:\n"
-        "  staff_meaning — ONE short line in Khmer script ONLY (for Cambodian staff). Never Thai.\n"
+        "  staff_meaning — 1–2 SHORT lines in Khmer script ONLY (simple words for shop staff). Never Thai.\n"
         "  customer_reply — SHORT reply in the CUSTOMER'S LANGUAGE specified in the user message\n"
         "  CRITICAL: customer_reply must NOT be in Khmer or Thai unless the customer language IS Khmer/Thai.\n"
         "  Style: casual chat, 1–3 short lines max, easy to copy.\n"
@@ -382,12 +471,12 @@ def draft_understand(customer_text: str) -> StaffUnderstanding:
     try:
         response = client.chat.completions.create(
             model=model,
-            temperature=0.2,
-            max_tokens=120,
+            temperature=0.1,
+            max_tokens=200,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": build_understand_system_prompt()},
-                {"role": "user", "content": f"Customer message:\n{customer_text}"},
+                {"role": "user", "content": build_understand_user_prompt(customer_text)},
             ],
         )
         raw = response.choices[0].message.content or "{}"
@@ -571,6 +660,10 @@ def draft_staff_translation(
 
 def format_stage1_card(original_text: str, understanding: StaffUnderstanding) -> str:
     original_block = original_text.strip() or "(no text)"
+    lang_line = understanding.language_name.strip() or "Unknown"
+    code = understanding.detected_language.strip().lower()
+    if code and code not in {"?", "unknown"}:
+        lang_line = f"{lang_line} ({code})"
     return "\n".join([
         "🤖 CHERRY Staff AI",
         "",
@@ -578,7 +671,7 @@ def format_stage1_card(original_text: str, understanding: StaffUnderstanding) ->
         original_block,
         "",
         "🌐 Language",
-        understanding.language_name,
+        lang_line,
         "",
         "👀 Meaning for Staff",
         understanding.staff_meaning,
