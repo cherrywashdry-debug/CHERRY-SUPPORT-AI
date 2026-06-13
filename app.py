@@ -38,7 +38,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TRANSLATOR-V3-FINAL"
+VERSION = "CHERRY STAFF AI - TRANSLATOR-GTRANSLATE-V1"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
@@ -47,6 +47,13 @@ if not KNOWLEDGE_PATH.is_file():
 ACTIVE_CASE_KEY = "staff_ai_active_case"
 STAFF_REPLY_GATE_KEY = "staff_ai_reply_gate"
 STAFF_REPLY_HANDLED_MSG_KEY = "staff_ai_handled_message_id"
+STAFF_LANG_USER_KEY = "staff_lang"
+DEFAULT_STAFF_LANG = "km"
+STAFF_LANG_OPTIONS: dict[str, str] = {
+    "km": "Khmer",
+    "th": "Thai",
+    "id": "Indonesian",
+}
 # In-memory fallback between webhook requests (same process).
 _AWAITING_STAFF_REPLY: dict[str, dict[str, Any]] = {}
 _STAFF_REPLY_GATE: dict[str, dict[str, Any]] = {}
@@ -84,6 +91,54 @@ THAI_SCRIPT_RE = re.compile(r"[\u0E00-\u0E7F]")
 
 def looks_like_khmer(text: str) -> bool:
     return bool(KHMER_SCRIPT_RE.search(str(text or "")))
+
+
+def looks_like_thai(text: str) -> bool:
+    return bool(THAI_SCRIPT_RE.search(str(text or "")))
+
+
+def normalize_staff_lang(code: str) -> str:
+    key = str(code or "").strip().lower()
+    return key if key in STAFF_LANG_OPTIONS else DEFAULT_STAFF_LANG
+
+
+def get_staff_language(context: ContextTypes.DEFAULT_TYPE) -> tuple[str, str]:
+    code = normalize_staff_lang(str(context.user_data.get(STAFF_LANG_USER_KEY, DEFAULT_STAFF_LANG)))
+    return code, STAFF_LANG_OPTIONS[code]
+
+
+def set_staff_language(context: ContextTypes.DEFAULT_TYPE, code: str) -> tuple[str, str]:
+    normalized = normalize_staff_lang(code)
+    context.user_data[STAFF_LANG_USER_KEY] = normalized
+    return normalized, STAFF_LANG_OPTIONS[normalized]
+
+
+def staff_meaning_label(staff_lang_code: str) -> str:
+    name = STAFF_LANG_OPTIONS.get(normalize_staff_lang(staff_lang_code), "Khmer")
+    return f"👀 Meaning for Staff ({name})"
+
+
+def staff_meaning_ok(text: str, staff_lang: str) -> bool:
+    cleaned = str(text or "").strip()
+    if not cleaned or cleaned == "—":
+        return False
+    lang = normalize_staff_lang(staff_lang)
+    if lang == "km":
+        return looks_like_khmer(cleaned)
+    if lang == "th":
+        return looks_like_thai(cleaned)
+    if lang == "id":
+        return not looks_like_khmer(cleaned) and not looks_like_thai(cleaned)
+    return True
+
+
+def google_translate_rules() -> str:
+    return (
+        "Translate like Google Translate.\n"
+        "Use simple everyday words. Be direct and short.\n"
+        "No formal language. No difficult words. No extra sentences.\n"
+        "Do NOT add information that is not in the source text."
+    )
 
 
 def new_support_id() -> str:
@@ -128,7 +183,7 @@ def case_is_staff_reply_wait(case: dict[str, Any], *, user_id: int) -> bool:
 
 def looks_like_staff_language(text: str) -> bool:
     raw = str(text or "")
-    return looks_like_khmer(raw) or bool(THAI_SCRIPT_RE.search(raw))
+    return looks_like_khmer(raw) or looks_like_thai(raw)
 
 
 def parse_chat_id(raw: str) -> int | None:
@@ -359,23 +414,24 @@ def language_hints_for_text(text: str) -> list[str]:
     return hints
 
 
-def build_understand_system_prompt() -> str:
+def build_understand_system_prompt(*, staff_language_name: str) -> str:
     return (
-        "You are a translator for CHERRY Wash & Dry shop staff.\n"
-        "Staff pasted a customer message. Your ONLY job: say what the customer means.\n"
+        "You are Google Translate for CHERRY Wash & Dry shop staff.\n"
+        f"Staff read {staff_language_name}. Translate the customer message into {staff_language_name}.\n"
+        "Your ONLY job: say what the customer means in simple words.\n"
         "Do NOT answer the customer. Do NOT suggest a reply. Do NOT add shop knowledge.\n\n"
-        "Detect the customer language from short, typo, or romanized text.\n"
-        "Poipet customers often use: Khmer, Thai, English, Indonesian, Malay, Chinese, Tagalog, Vietnamese.\n\n"
+        f"{google_translate_rules()}\n\n"
+        "Detect the customer language from short, typo, or romanized text.\n\n"
         "Return JSON with exactly these keys:\n"
         "  detected_language — short code (en, th, km, id, tl, ms, zh, vi, ...)\n"
         "  language_name — readable name (e.g. English, Indonesian)\n"
-        "  staff_meaning — 1–2 SHORT lines in Khmer OR Thai for shop staff.\n"
-        "    Plain words only. Say what the customer asked or said.\n"
+        f"  staff_meaning — 1–2 SHORT lines in {staff_language_name} ONLY.\n"
+        "    Plain words. Say what the customer asked or said.\n"
         "    Do NOT add price, time, policy, discount, promise, or apology.\n"
     )
 
 
-def build_understand_user_prompt(customer_text: str) -> str:
+def build_understand_user_prompt(customer_text: str, *, staff_language_name: str) -> str:
     lang_hints = language_hints_for_text(customer_text)
     hint_block = ""
     if lang_hints:
@@ -383,7 +439,7 @@ def build_understand_user_prompt(customer_text: str) -> str:
     return (
         f"{hint_block}"
         f"Customer message:\n{customer_text.strip() or '(empty)'}\n\n"
-        "Translate/explain the meaning for staff. Do not draft a customer reply."
+        f"Translate/explain in simple {staff_language_name} for staff. Do not draft a customer reply."
     )
 
 
@@ -424,8 +480,12 @@ def understanding_from_payload(payload: dict[str, Any]) -> StaffUnderstanding:
     )
 
 
-def draft_staff_reply_meaning(*, staff_wrote: str, customer_reply: str) -> str:
-    """Khmer-only summary of what will be sent to the customer."""
+def draft_staff_reply_meaning(
+    *,
+    staff_wrote: str,
+    customer_reply: str,
+    staff_language_name: str,
+) -> str:
     client = openai_client()
     if not client:
         return "—"
@@ -440,10 +500,10 @@ def draft_staff_reply_meaning(*, staff_wrote: str, customer_reply: str) -> str:
                 {
                     "role": "system",
                     "content": (
-                        "Explain for shop staff in Khmer OR Thai ONLY (1-2 short lines).\n"
+                        f"Explain for shop staff in {staff_language_name} ONLY (1-2 short lines).\n"
                         "Summarize what the customer_reply will tell the customer.\n"
-                        "Do NOT add price, time, policy, discount, promise, or apology.\n"
-                        "NEVER use Indonesian, English, or Malay."
+                        f"{google_translate_rules()}\n"
+                        "Do NOT add price, time, policy, discount, promise, or apology."
                     ),
                 },
                 {
@@ -457,20 +517,24 @@ def draft_staff_reply_meaning(*, staff_wrote: str, customer_reply: str) -> str:
             ],
         )
         raw = response.choices[0].message.content or "{}"
-        meaning = str(parse_llm_json(raw).get("staff_meaning", "") or "").strip()
-        if looks_like_staff_language(meaning):
-            return meaning
+        return str(parse_llm_json(raw).get("staff_meaning", "") or "").strip() or "—"
     except Exception:
         logger.exception("Staff reply meaning repair failed")
     return "—"
 
 
-def ensure_staff_reply_meaning(draft: StaffTranslationDraft) -> StaffTranslationDraft:
-    if looks_like_staff_language(draft.staff_meaning):
+def ensure_staff_reply_meaning(
+    draft: StaffTranslationDraft,
+    *,
+    staff_lang: str,
+    staff_language_name: str,
+) -> StaffTranslationDraft:
+    if staff_meaning_ok(draft.staff_meaning, staff_lang):
         return draft
     repaired = draft_staff_reply_meaning(
         staff_wrote=draft.staff_wrote,
         customer_reply=draft.customer_reply,
+        staff_language_name=staff_language_name,
     )
     return StaffTranslationDraft(
         staff_wrote=draft.staff_wrote,
@@ -480,7 +544,12 @@ def ensure_staff_reply_meaning(draft: StaffTranslationDraft) -> StaffTranslation
     )
 
 
-def draft_understand(customer_text: str) -> StaffUnderstanding:
+def draft_understand(
+    customer_text: str,
+    *,
+    staff_language: str,
+    staff_language_name: str,
+) -> StaffUnderstanding:
     client = openai_client()
     if not client:
         return StaffUnderstanding("?", "Unknown", "⚠️ OPENAI_API_KEY not set")
@@ -493,8 +562,17 @@ def draft_understand(customer_text: str) -> StaffUnderstanding:
             max_tokens=140,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": build_understand_system_prompt()},
-                {"role": "user", "content": build_understand_user_prompt(customer_text)},
+                {
+                    "role": "system",
+                    "content": build_understand_system_prompt(staff_language_name=staff_language_name),
+                },
+                {
+                    "role": "user",
+                    "content": build_understand_user_prompt(
+                        customer_text,
+                        staff_language_name=staff_language_name,
+                    ),
+                },
             ],
         )
         raw = response.choices[0].message.content or "{}"
@@ -506,15 +584,16 @@ def draft_understand(customer_text: str) -> StaffUnderstanding:
 
 def build_translate_system_prompt() -> str:
     return (
-        "You translate staff-written replies for CHERRY Wash & Dry customers.\n"
+        "You are Google Translate for CHERRY Wash & Dry customers.\n"
         "Translator only. Do NOT answer for staff. Do NOT add shop knowledge.\n\n"
+        f"{google_translate_rules()}\n\n"
         "RULES:\n"
-        "- translated_reply: customer language ONLY. Natural, easy to copy.\n"
-        "- staff_meaning: 1–2 short lines in Khmer OR Thai — what the customer will read.\n"
+        "- translated_reply: customer language ONLY. Simple, direct, easy to copy.\n"
+        "- staff_meaning: 1–2 short lines in the staff language — what the customer will read.\n"
         "- Keep the same meaning as staff wrote. Light grammar cleanup only.\n"
         "- Do NOT invent anything.\n"
         "- Do NOT add price, time, policy, discount, promise, or apology unless staff wrote it.\n"
-        "- Never put Khmer/Thai in translated_reply unless that IS the customer language.\n\n"
+        "- Never put staff-language text in translated_reply unless that IS the customer language.\n\n"
         "Return JSON keys: translated_reply, staff_meaning"
     )
 
@@ -524,6 +603,7 @@ def build_translate_user_prompt(
     *,
     customer_language: str,
     language_name: str,
+    staff_language_name: str,
     customer_original: str = "",
 ) -> str:
     context_block = ""
@@ -531,13 +611,14 @@ def build_translate_user_prompt(
         context_block = f"Original customer message (context only, do not answer it):\n{customer_original.strip()}\n\n"
     target = f"Target customer language: {language_name} ({customer_language})\n\n"
     lang_rule = (
-        f"translated_reply MUST be in {language_name} only. "
-        "Do NOT output Khmer or Thai unless that is the target language.\n\n"
+        f"translated_reply MUST be in {language_name} only — simple everyday words.\n"
+        "Do NOT output staff language unless that is the customer language.\n\n"
     )
     return (
         f"{context_block}{target}{lang_rule}"
         f"Staff wrote:\n{staff_text}\n\n"
-        f"Translate to {language_name}. staff_meaning in Khmer OR Thai for staff to verify."
+        f"Translate to {language_name} for the customer.\n"
+        f"staff_meaning in {staff_language_name} so staff can verify before sending."
     )
 
 
@@ -572,6 +653,8 @@ def draft_staff_translation(
     *,
     customer_language: str,
     language_name: str,
+    staff_language: str,
+    staff_language_name: str,
     customer_original: str = "",
 ) -> StaffTranslationDraft:
     client = openai_client()
@@ -598,6 +681,7 @@ def draft_staff_translation(
                         staff_text,
                         customer_language=customer_language,
                         language_name=language_name,
+                        staff_language_name=staff_language_name,
                         customer_original=customer_original,
                     ),
                 },
@@ -616,7 +700,11 @@ def draft_staff_translation(
                 customer_reply=staff_text,
                 staff_meaning=draft.staff_meaning,
             )
-        return ensure_staff_reply_meaning(draft)
+        return ensure_staff_reply_meaning(
+            draft,
+            staff_lang=staff_language,
+            staff_language_name=staff_language_name,
+        )
     except Exception as exc:
         logger.exception("OpenAI staff translation failed")
         return StaffTranslationDraft(
@@ -627,23 +715,31 @@ def draft_staff_translation(
         )
 
 
-def format_stage1_card(original_text: str, understanding: StaffUnderstanding) -> str:
+def format_stage1_card(
+    original_text: str,
+    understanding: StaffUnderstanding,
+    *,
+    staff_lang_code: str,
+) -> str:
     original_block = original_text.strip() or "(no text)"
+    customer_lang = understanding.language_name.strip() or "Unknown"
     return "\n".join([
         "📩 Customer Message",
         original_block,
         "",
-        "👀 Meaning for Staff",
+        f"🌐 Customer language: {customer_lang}",
+        "",
+        staff_meaning_label(staff_lang_code),
         understanding.staff_meaning,
     ])
 
 
-def format_reply_check_card(draft: StaffTranslationDraft) -> str:
+def format_reply_check_card(draft: StaffTranslationDraft, *, staff_lang_code: str) -> str:
     return "\n".join([
-        "👀 Meaning for Staff",
+        staff_meaning_label(staff_lang_code),
         draft.staff_meaning or "—",
         "",
-        "💬 Customer Reply",
+        f"💬 Customer Reply ({draft.language_name})",
         draft.customer_reply,
         "",
         REPLY_CHECK_FOOTER,
@@ -653,8 +749,24 @@ def format_reply_check_card(draft: StaffTranslationDraft) -> str:
 def stage1_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✍️ Reply Customer / ឆ្លើយអតិថិជន", callback_data="staffai:staff_reply")],
-        [InlineKeyboardButton("❌ Cancel / បោះបង់", callback_data="staffai:cancel")],
+        [
+            InlineKeyboardButton("🌐 Staff Language / ប្តូរភាសា", callback_data="staffai:lang_menu"),
+            InlineKeyboardButton("❌ Cancel / បោះបង់", callback_data="staffai:cancel"),
+        ],
     ])
+
+
+def staff_lang_keyboard(current_code: str) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for code, name in STAFF_LANG_OPTIONS.items():
+        mark = " ✓" if code == current_code else ""
+        rows.append([
+            InlineKeyboardButton(
+                f"{name}{mark}",
+                callback_data=f"staffai:lang:{code}",
+            ),
+        ])
+    return InlineKeyboardMarkup(rows)
 
 
 def copy_text_for_button(text: str, *, max_len: int = 256) -> str:
@@ -684,12 +796,13 @@ def stage2_keyboard(*, copy_text: str = "", show_send: bool = False) -> InlineKe
 
 
 USAGE_TEXT = (
-    "CHERRY Staff AI — translator only\n\n"
-    "1) Paste customer message → Meaning for Staff\n"
-    "2) ✍️ Reply Customer → type your reply\n"
-    "3) Check Meaning for Staff + Customer Reply → Copy or Send\n\n"
-    "AI never creates answers. It only translates.\n"
-    "Optional: forward from customer (for Send) or add Telegram ID in text\n"
+    "CHERRY Staff AI — like Google Translate\n\n"
+    "1) Paste customer message → bot detects customer language\n"
+    "2) Meaning for Staff in YOUR language (Khmer / Thai / Indonesian)\n"
+    "3) ✍️ Reply Customer → type in any language you know\n"
+    "4) Check meaning + customer reply → Copy or Send\n\n"
+    "Change your language: /lang or 🌐 Staff Language\n"
+    "AI only translates. Simple words. No invented answers.\n"
     "Setup: /group — show this group's ID for Render"
 )
 
@@ -739,6 +852,16 @@ def format_group_id_message(update: Update) -> str:
         lines.append("")
         lines.append("STAFF_GROUP_ID on server: not set yet")
     return "\n".join(lines)
+
+
+async def lang_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_staff_chat(update) or not update.message:
+        return
+    code, name = get_staff_language(context)
+    await update.message.reply_text(
+        f"Your staff language: {name}\nChoose the language for Meaning for Staff:",
+        reply_markup=staff_lang_keyboard(code),
+    )
 
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1045,6 +1168,12 @@ async def process_staff_reply_input(
     customer_original = str(
         stored.get("original_customer_message", "") or stored.get("question", "") or ""
     )
+    staff_lang = normalize_staff_lang(str(stored.get("staff_lang", DEFAULT_STAFF_LANG)))
+    staff_lang_name = str(stored.get("staff_lang_name", "") or STAFF_LANG_OPTIONS[staff_lang])
+    if user:
+        staff_lang, staff_lang_name = get_staff_language(context)
+        stored["staff_lang"] = staff_lang
+        stored["staff_lang_name"] = staff_lang_name
 
     try:
         await message.chat.send_action("typing")
@@ -1053,6 +1182,8 @@ async def process_staff_reply_input(
             staff_text,
             customer_language=customer_lang,
             language_name=customer_lang_name,
+            staff_language=staff_lang,
+            staff_language_name=staff_lang_name,
             customer_original=customer_original,
         )
         logger.info(
@@ -1063,7 +1194,7 @@ async def process_staff_reply_input(
         )
         stored["customer_reply"] = draft.customer_reply
         stored["staff_reply_meaning"] = draft.staff_meaning
-        card = format_reply_check_card(draft)
+        card = format_reply_check_card(draft, staff_lang_code=staff_lang)
         await send_stage2_reply(message=message, context=context, stored=stored, card=card)
         if chat and user:
             logger.info(
@@ -1084,6 +1215,8 @@ def new_case_payload(
     telegram_id: int | None,
     order_id: str,
     stage1_message_id: int,
+    staff_lang: str,
+    staff_lang_name: str,
 ) -> dict[str, Any]:
     return normalize_case({
         "question": question,
@@ -1092,6 +1225,8 @@ def new_case_payload(
         "detected_customer_language": understanding.detected_language,
         "language_name": understanding.language_name,
         "staff_meaning": understanding.staff_meaning,
+        "staff_lang": staff_lang,
+        "staff_lang_name": staff_lang_name,
         "staff_reply_meaning": "",
         "customer_reply": "",
         "reply_source": "staff",
@@ -1198,8 +1333,14 @@ async def handle_customer_message(update: Update, context: ContextTypes.DEFAULT_
 
     try:
         await message.chat.send_action("typing")
-        understanding = await asyncio.to_thread(draft_understand, text)
-        card = format_stage1_card(text, understanding)
+        staff_lang, staff_lang_name = get_staff_language(context)
+        understanding = await asyncio.to_thread(
+            draft_understand,
+            text,
+            staff_language=staff_lang,
+            staff_language_name=staff_lang_name,
+        )
+        card = format_stage1_card(text, understanding, staff_lang_code=staff_lang)
         sent = await message.reply_text(card, reply_markup=stage1_keyboard())
 
         save_active_case(
@@ -1210,6 +1351,8 @@ async def handle_customer_message(update: Update, context: ContextTypes.DEFAULT_
                 telegram_id=telegram_id,
                 order_id=order_id,
                 stage1_message_id=sent.message_id,
+                staff_lang=staff_lang,
+                staff_lang_name=staff_lang_name,
             ),
             chat_id=chat.id,
         )
@@ -1250,6 +1393,20 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         except Exception:
             pass
         await query.message.reply_text("Cancelled.")
+        return
+
+    if action == "lang_menu":
+        code, name = get_staff_language(context)
+        await query.message.reply_text(
+            f"Your staff language: {name}\nChoose the language for Meaning for Staff:",
+            reply_markup=staff_lang_keyboard(code),
+        )
+        return
+
+    if action.startswith("lang:"):
+        picked = action.split(":", 1)[1]
+        code, name = set_staff_language(context, picked)
+        await query.message.reply_text(f"Staff language set to {name}.")
         return
 
     if action == "cancel_reply":
@@ -1376,6 +1533,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("group", group_cmd))
     app.add_handler(CommandHandler("chatid", group_cmd))
     app.add_handler(CommandHandler("id", group_cmd))
+    app.add_handler(CommandHandler("lang", lang_cmd))
     app.add_handler(CommandHandler("health", health_cmd))
     app.add_handler(CallbackQueryHandler(staff_ai_callback, pattern=r"^staffai:"))
     text_filter = filters.TEXT & ~filters.COMMAND
