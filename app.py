@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TWO-STAGE-V11-KM-GUIDE"
+VERSION = "CHERRY STAFF AI - TWO-STAGE-V12-CARD-LAYOUT"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
@@ -95,6 +95,25 @@ STAFF_REPLY_PROMPT = (
     "You can type in Thai, Khmer, English, or Indonesian.\n"
     "AI will translate it to the customer language."
 )
+
+STAGE2_FOOTER = "⚠️ Check before send/ពិនិត្យមុននិងផ្ញើ"
+
+
+def stage2_header(mode_label: str = "") -> str:
+    header = "💻 CHERRY AI Reply"
+    if mode_label.strip():
+        return f"{header} · {mode_label.strip()}"
+    return header
+
+
+def format_customer_lang_line(*, language_code: str = "", language_name: str = "") -> str:
+    code = str(language_code or "").strip().lower()
+    if code and code not in {"?", "unknown"}:
+        return f"🌐 Customer  ({code})"
+    name = str(language_name or "").strip()
+    if name and name.lower() not in {"unknown", "?"}:
+        return f"🌐 Customer  ({name})"
+    return "🌐 Customer"
 
 
 def parse_chat_id(raw: str) -> int | None:
@@ -419,8 +438,9 @@ def build_reply_system_prompt(knowledge: str) -> str:
         f"{CHERRY_PRICING_CORE}\n"
         "Reply rules:\n"
         "- customer_reply: SHORT, casual, in the customer's language — easy to copy-paste.\n"
-        "- reply_meaning_km: 1–2 simple Khmer lines — translate/summarize what customer_reply tells the customer.\n"
-        "- next_steps_km: 1 short Khmer line — what Cambodian staff should do AFTER sending (copy, wait, follow up).\n"
+        "- reply_meaning_km: 1–2 simple Khmer lines — what customer_reply tells the customer "
+        "(and briefly what staff should do next, if relevant).\n"
+        "- next_steps_km: optional extra Khmer line for staff follow-up (may duplicate reply_meaning_km).\n"
         "- If customer asks price OR mentions little/small amount (sedikit/hanya/mahal/etc.):\n"
         "  MUST state relevant package price(s) and that CHERRY charges per MACHINE, not by clothing qty.\n"
         "- Never use Khmer/Thai in customer_reply unless that IS the customer language.\n"
@@ -795,35 +815,28 @@ def format_stage2_card(
     *,
     question_meaning: str = "",
     language_name: str = "",
+    language_code: str = "",
     mode_label: str = "",
 ) -> str:
-    header = "🤖 CHERRY AI Reply"
-    if mode_label:
-        header = f"{header} · {mode_label}"
-    lines = [header, ""]
+    lines = [stage2_header(mode_label), ""]
     q_meaning = question_meaning.strip() or draft.staff_meaning.strip()
     if q_meaning and q_meaning != "—":
         lines.extend([
-            "👀 Customer asked / អតិថិជនសួរ",
+            "Customer asked / អតិថិជនសួរ",
             q_meaning,
             "",
         ])
     lines.extend([
-        "📖 Reply means / បកប្រែចម្លើយ",
+        "📖 Reply means / ចម្លើយដែលឆ្លើយ",
         draft.reply_meaning_km or "—",
         "",
-        "👉 Next step / បន្ទាប់",
-        draft.next_steps_km or "—",
-    ])
-    if language_name.strip():
-        lines.extend(["", "🌐 Customer Language", language_name.strip()])
-    lines.extend([
-        "",
+        format_customer_lang_line(language_code=language_code, language_name=language_name),
         "💬 Reply /តបភ្ញៀវ",
+        "",
         draft.customer_reply,
         "",
         "━━━━━━━━━━━━━━",
-        "⚠️ Check before send",
+        STAGE2_FOOTER,
     ])
     return "\n".join(lines)
 
@@ -832,15 +845,13 @@ def format_staff_translation_card(
     draft: StaffTranslationDraft,
     *,
     question_meaning: str = "",
+    language_code: str = "",
     mode_label: str = "",
 ) -> str:
-    header = "🤖 CHERRY AI Reply"
-    if mode_label:
-        header = f"{header} · {mode_label}"
-    lines = [header, ""]
+    lines = [stage2_header(mode_label), ""]
     if question_meaning.strip():
         lines.extend([
-            "👀 Customer asked / អតិថិជនសួរ",
+            "Customer asked / អតិថិជនសួរ",
             question_meaning.strip(),
             "",
         ])
@@ -848,20 +859,16 @@ def format_staff_translation_card(
         "👩🏼‍💻 Staff /បុគ្គលិក",
         draft.staff_wrote,
         "",
-        "📖 Reply means / បកប្រែចម្លើយ",
+        "📖 Reply means / ចម្លើយដែលឆ្លើយ",
         draft.reply_meaning_km or "—",
         "",
-        "👉 Next step / បន្ទាប់",
-        draft.next_steps_km or "—",
-        "",
-        "🌐 Customer Language",
-        draft.language_name,
-        "",
+        format_customer_lang_line(language_code=language_code, language_name=draft.language_name),
         "💬 Reply /តបភ្ញៀវ",
+        "",
         draft.translated_reply,
         "",
         "━━━━━━━━━━━━━━",
-        "⚠️ Check before send",
+        STAGE2_FOOTER,
     ])
     return "\n".join(lines)
 
@@ -1152,6 +1159,7 @@ async def process_staff_reply_input(
         card = format_staff_translation_card(
             draft,
             question_meaning=str(stored.get("staff_meaning", "") or ""),
+            language_code=str(stored.get("detected_language", "") or ""),
         )
         await send_stage2_reply(message=message, context=context, stored=stored, card=card)
     except Exception:
@@ -1332,6 +1340,7 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             draft,
             question_meaning=staff_meaning,
             language_name=str(stored.get("language_name", "") or ""),
+            language_code=str(stored.get("detected_language", "") or ""),
         )
         await send_stage2_reply(message=query.message, context=context, stored=stored, card=card)
         return
@@ -1404,6 +1413,7 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         card = format_staff_translation_card(
             draft,
             question_meaning=staff_meaning,
+            language_code=str(stored.get("detected_language", "") or ""),
             mode_label=label,
         )
     else:
@@ -1424,6 +1434,7 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             draft,
             question_meaning=staff_meaning,
             language_name=str(stored.get("language_name", "") or ""),
+            language_code=str(stored.get("detected_language", "") or ""),
             mode_label=label,
         )
 
