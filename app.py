@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import re
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -37,7 +38,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TRANSLATOR-V2-KM-MEANING"
+VERSION = "CHERRY STAFF AI - TRANSLATOR-V3-STAFF-REPLY-FIX"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
@@ -82,6 +83,30 @@ THAI_SCRIPT_RE = re.compile(r"[\u0E00-\u0E7F]")
 
 def looks_like_khmer(text: str) -> bool:
     return bool(KHMER_SCRIPT_RE.search(str(text or "")))
+
+
+def new_support_id() -> str:
+    return uuid.uuid4().hex[:8]
+
+
+def normalize_case(case: dict[str, Any], *, chat_id: int | None = None) -> dict[str, Any]:
+    payload = dict(case)
+    if not str(payload.get("support_id", "") or "").strip():
+        payload["support_id"] = new_support_id()
+    question = str(payload.get("question", "") or payload.get("original_customer_message", "") or "").strip()
+    payload["question"] = question
+    payload["original_customer_message"] = question
+    if chat_id is not None:
+        payload["chat_id"] = chat_id
+    payload.setdefault("staff_reply_mode", False)
+    payload.setdefault("awaiting_staff_reply", False)
+    return payload
+
+
+def case_is_staff_reply_wait(case: dict[str, Any], *, user_id: int) -> bool:
+    return bool(case.get("staff_reply_mode") or case.get("awaiting_staff_reply")) and (
+        case.get("staff_reply_user_id") == user_id
+    )
 
 
 def looks_like_staff_language(text: str) -> bool:
@@ -426,9 +451,9 @@ def draft_staff_reply_meaning(*, staff_wrote: str, customer_reply: str) -> str:
                 {
                     "role": "system",
                     "content": (
-                        "Explain for Cambodian shop staff in Khmer script ONLY (1-2 short lines).\n"
+                        "Explain for shop staff in Khmer OR Thai ONLY (1-2 short lines).\n"
                         "Summarize what the customer_reply will tell the customer.\n"
-                        "NEVER use Thai, Indonesian, English, or Malay."
+                        "NEVER use Indonesian, English, or Malay."
                     ),
                 },
                 {
@@ -443,7 +468,7 @@ def draft_staff_reply_meaning(*, staff_wrote: str, customer_reply: str) -> str:
         )
         raw = response.choices[0].message.content or "{}"
         meaning = str(parse_llm_json(raw).get("staff_meaning", "") or "").strip()
-        if looks_like_khmer(meaning):
+        if looks_like_staff_language(meaning):
             return meaning
     except Exception:
         logger.exception("Staff reply meaning repair failed")
@@ -451,7 +476,7 @@ def draft_staff_reply_meaning(*, staff_wrote: str, customer_reply: str) -> str:
 
 
 def ensure_staff_reply_meaning(draft: StaffTranslationDraft) -> StaffTranslationDraft:
-    if looks_like_khmer(draft.staff_meaning):
+    if looks_like_staff_language(draft.staff_meaning):
         return draft
     repaired = draft_staff_reply_meaning(
         staff_wrote=draft.staff_wrote,
@@ -495,7 +520,7 @@ def build_translate_system_prompt() -> str:
         "You do NOT answer for staff. You do NOT add shop knowledge.\n\n"
         "RULES:\n"
         "- translated_reply: target customer language ONLY. Short, natural, easy to copy.\n"
-        "- staff_meaning: 1-2 short lines in Khmer script ONLY — what customer will receive.\n"
+        "- staff_meaning: 1-2 short lines in Khmer OR Thai — what customer will receive.\n"
         "- Do NOT invent information.\n"
         "- Do NOT add price, time, policy, or promise unless staff wrote it.\n"
         "- Only clean grammar/tone and translate. Keep the same meaning as staff wrote.\n"
@@ -810,14 +835,16 @@ def _await_key(chat_id: int, user_id: int) -> str:
 
 
 def set_awaiting_staff_reply(chat_id: int, user_id: int, case: dict[str, Any]) -> dict[str, Any]:
-    payload = dict(case)
+    payload = normalize_case(case, chat_id=chat_id)
+    payload["staff_reply_mode"] = True
     payload["awaiting_staff_reply"] = True
     payload["staff_reply_user_id"] = user_id
     _AWAITING_STAFF_REPLY[_await_key(chat_id, user_id)] = payload
     logger.info(
-        "awaiting staff reply chat=%s user=%s customer_lang=%s",
+        "staff_reply_mode ON chat=%s user=%s support_id=%s lang=%s",
         chat_id,
         user_id,
+        payload.get("support_id"),
         payload.get("language_name"),
     )
     return payload
@@ -850,7 +877,7 @@ def bind_staff_reply_wait(
     context.user_data["staff_ai_case"] = payload
     awaiting = context.application.bot_data.setdefault("staff_ai_awaiting", {})
     awaiting[_await_key(chat_id, user_id)] = payload
-    save_active_case(context, payload)
+    save_active_case(context, payload, chat_id=chat_id)
     return payload
 
 
@@ -868,6 +895,14 @@ def clear_staff_reply_wait(
     awaiting.pop(_await_key(chat_id, user_id), None)
     if prompt_id is not None:
         _PROMPT_TO_CASE.pop(prompt_id, None)
+        context.application.bot_data.get("staff_ai_prompts", {}).pop(str(prompt_id), None)
+    stored = context.chat_data.get(ACTIVE_CASE_KEY)
+    if isinstance(stored, dict) and stored.get("chat_id") == chat_id:
+        stored = dict(stored)
+        stored["staff_reply_mode"] = False
+        stored["awaiting_staff_reply"] = False
+        stored["staff_reply_user_id"] = None
+        save_active_case(context, stored, chat_id=chat_id)
 
 
 def resolve_pending_staff_case(
@@ -882,41 +917,75 @@ def resolve_pending_staff_case(
 
     reply_to = message.reply_to_message
     if reply_to and reply_to.message_id in _PROMPT_TO_CASE:
-        case = dict(_PROMPT_TO_CASE.pop(reply_to.message_id))
-        logger.info("staff reply matched prompt_id=%s user=%s", reply_to.message_id, user.id)
+        case = dict(_PROMPT_TO_CASE[reply_to.message_id])
+        logger.info(
+            "staff reply matched prompt_id=%s user=%s support_id=%s",
+            reply_to.message_id,
+            user.id,
+            case.get("support_id"),
+        )
         return case
 
+    prompts = context.application.bot_data.get("staff_ai_prompts", {})
+    prompt_key = prompts.get(str(getattr(reply_to, "message_id", "")))
+    if reply_to and prompt_key:
+        awaiting = context.application.bot_data.get("staff_ai_awaiting", {})
+        mem = awaiting.get(prompt_key)
+        if isinstance(mem, dict) and case_is_staff_reply_wait(mem, user_id=user.id):
+            logger.info("staff reply matched persisted prompt user=%s", user.id)
+            return dict(mem)
+
+    stored = context.chat_data.get(ACTIVE_CASE_KEY)
+    if isinstance(stored, dict) and case_is_staff_reply_wait(stored, user_id=user.id):
+        logger.info(
+            "staff reply matched chat_data user=%s support_id=%s",
+            user.id,
+            stored.get("support_id"),
+        )
+        return dict(stored)
+
+    by_chat = context.application.bot_data.get("staff_ai_by_chat", {})
+    chat_case = by_chat.get(str(chat.id))
+    if isinstance(chat_case, dict) and case_is_staff_reply_wait(chat_case, user_id=user.id):
+        logger.info("staff reply matched bot_data chat case user=%s", user.id)
+        return dict(chat_case)
+
     pending = get_awaiting_staff_reply(chat.id, user.id)
-    if pending:
-        logger.info("staff reply matched memory user=%s lang=%s", user.id, pending.get("language_name"))
+    if pending and case_is_staff_reply_wait(pending, user_id=user.id):
+        logger.info("staff reply matched memory user=%s", user.id)
         return pending
 
     bot_awaiting = context.application.bot_data.get("staff_ai_awaiting", {})
     mem = bot_awaiting.get(_await_key(chat.id, user.id))
-    if isinstance(mem, dict) and mem.get("awaiting_staff_reply"):
+    if isinstance(mem, dict) and case_is_staff_reply_wait(mem, user_id=user.id):
         logger.info("staff reply matched bot_data user=%s", user.id)
         return dict(mem)
 
     if context.user_data.get("staff_ai_awaiting") and isinstance(context.user_data.get("staff_ai_case"), dict):
         case = dict(context.user_data["staff_ai_case"])
-        if case.get("staff_reply_user_id") == user.id:
+        if case_is_staff_reply_wait(case, user_id=user.id):
             logger.info("staff reply matched user_data user=%s", user.id)
             return case
-
-    stored = context.chat_data.get(ACTIVE_CASE_KEY)
-    if (
-        isinstance(stored, dict)
-        and stored.get("awaiting_staff_reply")
-        and stored.get("staff_reply_user_id") == user.id
-    ):
-        logger.info("staff reply matched chat_data user=%s", user.id)
-        return dict(stored)
 
     return None
 
 
-def save_active_case(context: ContextTypes.DEFAULT_TYPE, case: dict[str, Any]) -> None:
-    context.chat_data[ACTIVE_CASE_KEY] = case
+def save_active_case(
+    context: ContextTypes.DEFAULT_TYPE,
+    case: dict[str, Any],
+    *,
+    chat_id: int | None = None,
+) -> None:
+    cid = chat_id if chat_id is not None else case.get("chat_id")
+    payload = normalize_case(case, chat_id=cid if isinstance(cid, int) else None)
+    context.chat_data[ACTIVE_CASE_KEY] = payload
+    if isinstance(cid, int):
+        context.application.bot_data.setdefault("staff_ai_by_chat", {})[str(cid)] = payload
+    uid = payload.get("staff_reply_user_id")
+    if payload.get("staff_reply_mode") and isinstance(cid, int) and isinstance(uid, int):
+        context.application.bot_data.setdefault("staff_ai_awaiting", {})[
+            _await_key(cid, uid)
+        ] = payload
 
 
 async def process_staff_reply_input(
@@ -936,6 +1005,7 @@ async def process_staff_reply_input(
     chat = update.effective_chat
     user = update.effective_user
     stored = dict(stored)
+    stored["staff_reply_mode"] = False
     stored["awaiting_staff_reply"] = False
     stored["staff_reply_user_id"] = None
     stored["reply_source"] = "staff"
@@ -950,14 +1020,20 @@ async def process_staff_reply_input(
             prompt_id=int(prompt_id) if prompt_id else None,
         )
 
+    customer_lang = str(stored.get("detected_language", "") or "")
+    customer_lang_name = str(stored.get("language_name", "") or "Unknown")
+    customer_original = str(
+        stored.get("original_customer_message", "") or stored.get("question", "") or ""
+    )
+
     try:
         await message.chat.send_action("typing")
         draft = await asyncio.to_thread(
             draft_staff_translation,
             staff_text,
-            customer_language=str(stored.get("detected_language", "") or ""),
-            language_name=str(stored.get("language_name", "") or "Unknown"),
-            customer_original=str(stored.get("question", "") or ""),
+            customer_language=customer_lang,
+            language_name=customer_lang_name,
+            customer_original=customer_original,
         )
         stored["customer_reply"] = draft.customer_reply
         stored["staff_reply_meaning"] = draft.staff_meaning
@@ -976,22 +1052,25 @@ def new_case_payload(
     order_id: str,
     stage1_message_id: int,
 ) -> dict[str, Any]:
-    return {
+    return normalize_case({
         "question": question,
+        "original_customer_message": question,
         "detected_language": understanding.detected_language,
+        "detected_customer_language": understanding.detected_language,
         "language_name": understanding.language_name,
         "staff_meaning": understanding.staff_meaning,
         "staff_reply_meaning": "",
         "customer_reply": "",
         "reply_source": "staff",
         "staff_wrote": "",
+        "staff_reply_mode": False,
         "awaiting_staff_reply": False,
         "staff_reply_user_id": None,
         "stage1_message_id": stage1_message_id,
         "reply_message_id": None,
         "telegram_id": telegram_id,
         "order_id": order_id,
-    }
+    })
 
 
 async def send_stage2_reply(
@@ -1010,7 +1089,7 @@ async def send_stage2_reply(
         ),
     )
     stored["reply_message_id"] = sent.message_id
-    save_active_case(context, stored)
+    save_active_case(context, stored, chat_id=stored.get("chat_id"))
 
 
 async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1039,6 +1118,21 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
+    chat = update.effective_chat
+    stored_case = context.chat_data.get(ACTIVE_CASE_KEY)
+    if (
+        isinstance(stored_case, dict)
+        and user
+        and case_is_staff_reply_wait(stored_case, user_id=user.id)
+    ):
+        await process_staff_reply_input(
+            update,
+            context,
+            stored=dict(stored_case),
+            staff_text=raw_text.strip(),
+        )
+        return
+
     text, telegram_id, order_id = extract_message_context(message)
     if not text:
         return
@@ -1047,7 +1141,6 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
         await message.reply_text(SETUP_HINT)
         return
 
-    chat = update.effective_chat
     logger.info(
         "stage1 chat=%s user=%s text=%r",
         getattr(chat, "id", None),
@@ -1055,8 +1148,8 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
         text[:120],
     )
 
-    if chat:
-        clear_awaiting_for_chat(chat.id)
+    if chat and user:
+        clear_staff_reply_wait(context, chat.id, user.id)
 
     try:
         await message.chat.send_action("typing")
@@ -1073,6 +1166,7 @@ async def handle_staff_message(update: Update, context: ContextTypes.DEFAULT_TYP
                 order_id=order_id,
                 stage1_message_id=sent.message_id,
             ),
+            chat_id=chat.id if chat else None,
         )
     except Exception:
         logger.exception("handle_staff_message failed for text=%r", text[:120])
@@ -1137,7 +1231,9 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         payload["staff_reply_prompt_id"] = sent.message_id
         _PROMPT_TO_CASE[sent.message_id] = dict(payload)
-        save_active_case(context, payload)
+        prompts = context.application.bot_data.setdefault("staff_ai_prompts", {})
+        prompts[str(sent.message_id)] = _await_key(query.message.chat_id, query.from_user.id)
+        save_active_case(context, payload, chat_id=query.message.chat_id)
         return
 
     if action == "send":
