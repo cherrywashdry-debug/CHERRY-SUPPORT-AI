@@ -1,47 +1,75 @@
-# CHERRY Support AI
+# CHERRY SUPPORT AI — FAQ Bot
 
-Separate Telegram bot for CHERRY staff — two-layer reply drafts (Khmer summary + customer-language reply).
+บอท Telegram FAQ แยกจาก CHERRY BOT V3 สำหรับ CHERRY Wash & Dry
 
 **Production:** https://cherry-support-ai.onrender.com
 
-## Render settings (pick ONE)
+## วัตถุประสงค์
 
-### Option A — Docker (recommended if exit status 127)
+ลูกค้าและพนักงานกดปุ่มเพื่อดูคำตอบ FAQ ที่เตรียมไว้แล้ว ไม่มี AI ตอบอิสระ ไม่เชื่อมออเดอร์/บิล/แต้ม
+
+## ฟีเจอร์
+
+- เมนูหลัก 8 หัวข้อ + เปลี่ยนภาษา
+- เมนูย่อย: ราคา/ค่าส่ง, บริการซัก, รับ-ส่ง, อ่านก่อนใช้บริการ
+- ภาษา: English (ค่าเริ่มต้น), ไทย, Khmer, Indonesia
+- Khmer / Indonesia ใช้ข้อความ EN แทนจนกว่าจะแปล (TODO ใน `faq_content.py`)
+- คำสั่ง: `/start`, `/menu`, `/language`, `/health`
+
+## แก้คำตอบ FAQ
+
+แก้ที่ `faq_content.py` เท่านั้น:
+
+```python
+FAQ_CONTENT["en"]["opening_hours"] = "..."
+FAQ_CONTENT["th"]["opening_hours"] = "..."
+```
+
+## Render settings
+
+### Option A — Docker (แนะนำ)
 
 | Setting | Value |
 |---------|-------|
-| **Language / Runtime** | **Docker** |
-| **Dockerfile Path** | `./Dockerfile` |
-| **Root Directory** | *(empty)* |
-| **Build Command** | *(empty)* |
-| **Start Command** | *(empty)* |
+| Language | Docker |
+| Dockerfile Path | `./Dockerfile` |
 
 ### Option B — Native Python
 
 | Setting | Value |
 |---------|-------|
-| **Language / Runtime** | **Python 3** (not Rust) |
-| **Root Directory** | *(empty)* |
-| **Build Command** | `pip install -r requirements.txt` |
-| **Start Command** | `python3 app.py` |
-| **Health Check** | `/health` |
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `python3 app.py` |
+| Health Check | `/health` |
 
-`runtime.txt` pins Python 3.12.8.
+## Environment
 
-If logs show `python: command not found` or **exit status 127** → Language is still Rust/wrong. **Use Option A (Docker).**
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `BOT_TOKEN` | Yes | Token จาก BotFather (บอท CHERRY SUPPORT AI) |
+| `WEBHOOK_URL` | Yes on Render | `https://cherry-support-ai.onrender.com/telegram` |
 
-## Setup
+## Local run
 
-1. Set Render env: `BOT_TOKEN`, `OPENAI_API_KEY`, `WEBHOOK_URL`
-2. Deploy → send `/group` in staff Telegram group → copy `STAFF_GROUP_ID` → redeploy
-3. BotFather `/setprivacy` → **Disable** for the support bot
+```bash
+pip install -r requirements.txt
+cp .env.example .env
+# ใส่ BOT_TOKEN
+python app.py
+```
 
-## Commands
+## Tests
 
-| Command | Purpose |
-|---------|---------|
-| `/group` | Show Telegram group ID for Render |
-| `/start` | Usage |
-| `/health` | Bot + knowledge check |
+```bash
+python -m unittest discover -s tests -v
+```
 
-Paste customer messages in the staff group for AI draft replies.
+## Deploy
+
+```bash
+git push origin main
+```
+
+Render จะ deploy อัตโนมัติจาก repo นี้
+
+**Not CHERRY BOT V3** — ใช้ BOT_TOKEN แยก ไม่เชื่อม Google Sheet
