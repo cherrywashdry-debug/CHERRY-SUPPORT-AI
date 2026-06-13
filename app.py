@@ -38,7 +38,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TRANSLATOR-GTRANSLATE-V2-REPLY-TO-CARD"
+VERSION = "CHERRY STAFF AI - TRANSLATOR-V4-MENU-BUTTONS"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
@@ -48,11 +48,18 @@ ACTIVE_CASE_KEY = "staff_ai_active_case"
 STAFF_REPLY_GATE_KEY = "staff_ai_reply_gate"
 STAFF_REPLY_HANDLED_MSG_KEY = "staff_ai_handled_message_id"
 STAFF_LANG_USER_KEY = "staff_lang"
+STAFF_LANG_SET_KEY = "staff_lang_set"
+CUSTOMER_ASK_MODE_KEY = "customer_ask_mode"
 DEFAULT_STAFF_LANG = "km"
 STAFF_LANG_OPTIONS: dict[str, str] = {
     "km": "Khmer",
     "th": "Thai",
     "id": "Indonesian",
+}
+STAFF_LANG_LABELS: dict[str, str] = {
+    "km": "🇰🇭 Khmer",
+    "th": "🇹🇭 Thai",
+    "id": "🇮🇩 Indonesian",
 }
 # In-memory fallback between webhook requests (same process).
 _AWAITING_STAFF_REPLY: dict[str, dict[str, Any]] = {}
@@ -78,11 +85,17 @@ class StaffTranslationDraft:
 
 
 STAFF_REPLY_PROMPT = (
-    "✍️ Type your reply for the customer.\n"
-    "Reply to this message, reply to the card, or just type in the group.\n"
-    "Thai, Khmer, English, or Indonesian are fine.\n"
-    "AI will translate only — it will not add new information."
+    "✍️ Staff Reply — type your answer for the customer.\n"
+    "Use Thai, Khmer, English, or Indonesian.\n"
+    "AI translates only. It will not add new information."
 )
+
+CUSTOMER_ASK_PROMPT = (
+    "📩 Customer Asked — paste the customer message below.\n"
+    "Bot will detect customer language and explain in your language."
+)
+
+MENU_HINT = "Choose a button below:"
 
 REPLY_CHECK_FOOTER = "⚠️ Please check carefully before sending."
 
@@ -111,7 +124,29 @@ def get_staff_language(context: ContextTypes.DEFAULT_TYPE) -> tuple[str, str]:
 def set_staff_language(context: ContextTypes.DEFAULT_TYPE, code: str) -> tuple[str, str]:
     normalized = normalize_staff_lang(code)
     context.user_data[STAFF_LANG_USER_KEY] = normalized
+    context.user_data[STAFF_LANG_SET_KEY] = True
     return normalized, STAFF_LANG_OPTIONS[normalized]
+
+
+def staff_language_is_set(context: ContextTypes.DEFAULT_TYPE) -> bool:
+    return bool(context.user_data.get(STAFF_LANG_SET_KEY))
+
+
+def set_customer_ask_mode(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> None:
+    context.user_data[CUSTOMER_ASK_MODE_KEY] = True
+    context.user_data["customer_ask_user_id"] = int(user_id)
+
+
+def clear_customer_ask_mode(context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data.pop(CUSTOMER_ASK_MODE_KEY, None)
+    context.user_data.pop("customer_ask_user_id", None)
+
+
+def customer_ask_mode_active(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
+    if not context.user_data.get(CUSTOMER_ASK_MODE_KEY):
+        return False
+    stored_uid = _coerce_user_id(context.user_data.get("customer_ask_user_id"))
+    return stored_uid is None or stored_uid == user_id
 
 
 def staff_meaning_label(staff_lang_code: str) -> str:
@@ -747,26 +782,45 @@ def format_reply_check_card(draft: StaffTranslationDraft, *, staff_lang_code: st
     ])
 
 
-def stage1_keyboard() -> InlineKeyboardMarkup:
+def main_menu_keyboard(*, staff_lang_code: str) -> InlineKeyboardMarkup:
+    lang_name = STAFF_LANG_OPTIONS.get(staff_lang_code, "Khmer")
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✍️ Reply Customer / ឆ្លើយអតិថិជន", callback_data="staffai:staff_reply")],
-        [
-            InlineKeyboardButton("🌐 Staff Language / ប្តូរភាសា", callback_data="staffai:lang_menu"),
-            InlineKeyboardButton("❌ Cancel / បោះបង់", callback_data="staffai:cancel"),
-        ],
+        [InlineKeyboardButton(
+            f"🌐 My Language: {lang_name}",
+            callback_data="staffai:lang_menu",
+        )],
+        [InlineKeyboardButton(
+            "📩 Customer Asked / អតិថិជនសួរ",
+            callback_data="staffai:customer_ask",
+        )],
+        [InlineKeyboardButton(
+            "✍️ Staff Reply / បុគ្គលិកឆ្លើយ",
+            callback_data="staffai:staff_reply",
+        )],
     ])
 
 
-def staff_lang_keyboard(current_code: str) -> InlineKeyboardMarkup:
+def stage1_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✍️ Staff Reply / បុគ្គលិកឆ្លើយ", callback_data="staffai:staff_reply")],
+        [InlineKeyboardButton("📩 New Customer / អតិថិជនថ្មី", callback_data="staffai:customer_ask")],
+        [InlineKeyboardButton("🏠 Menu / ម៉ឺនុយ", callback_data="staffai:main_menu")],
+    ])
+
+
+def staff_lang_keyboard(current_code: str, *, first_time: bool = False) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     for code, name in STAFF_LANG_OPTIONS.items():
         mark = " ✓" if code == current_code else ""
+        label = STAFF_LANG_LABELS.get(code, name)
         rows.append([
             InlineKeyboardButton(
-                f"{name}{mark}",
+                f"{label}{mark}",
                 callback_data=f"staffai:lang:{code}",
             ),
         ])
+    if not first_time:
+        rows.append([InlineKeyboardButton("🏠 Menu / ម៉ឺនុយ", callback_data="staffai:main_menu")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -797,14 +851,13 @@ def stage2_keyboard(*, copy_text: str = "", show_send: bool = False) -> InlineKe
 
 
 USAGE_TEXT = (
-    "CHERRY Staff AI — like Google Translate\n\n"
-    "1) Paste customer message → bot detects customer language\n"
-    "2) Meaning for Staff in YOUR language (Khmer / Thai / Indonesian)\n"
-    "3) ✍️ Reply Customer → type in any language you know\n"
-    "4) Check meaning + customer reply → Copy or Send\n\n"
-    "Change your language: /lang or 🌐 Staff Language\n"
-    "AI only translates. Simple words. No invented answers.\n"
-    "Setup: /group — show this group's ID for Render"
+    "CHERRY Staff AI — Google Translate for staff\n\n"
+    "Step 1: Choose YOUR language (Khmer / Thai / Indonesian)\n"
+    "Step 2: Press 📩 Customer Asked → paste customer message\n"
+    "Step 3: Press ✍️ Staff Reply → type your answer\n"
+    "Step 4: Check meaning + customer reply → Copy or Send\n\n"
+    "Commands: /menu /lang /health\n"
+    "AI only translates. Simple words. No invented answers."
 )
 
 SETUP_HINT = (
@@ -855,24 +908,64 @@ def format_group_id_message(update: Update) -> str:
     return "\n".join(lines)
 
 
+async def send_lang_picker(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    first_time: bool = False,
+) -> None:
+    code, _ = get_staff_language(context)
+    text = (
+        "Choose YOUR language first:\n"
+        "Khmer / Thai / Indonesian"
+        if first_time
+        else f"Your language: {STAFF_LANG_OPTIONS[code]}\nChoose language for Meaning for Staff:"
+    )
+    target = update.message or update.callback_query.message
+    if target:
+        await target.reply_text(
+            text,
+            reply_markup=staff_lang_keyboard(code, first_time=first_time),
+        )
+
+
+async def send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not staff_language_is_set(context):
+        await send_lang_picker(update, context, first_time=True)
+        return
+    code, name = get_staff_language(context)
+    target = update.message or (update.callback_query.message if update.callback_query else None)
+    if target:
+        await target.reply_text(
+            f"Your language: {name}\n{MENU_HINT}",
+            reply_markup=main_menu_keyboard(staff_lang_code=code),
+        )
+
+
 async def lang_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_staff_chat(update) or not update.message:
         return
-    code, name = get_staff_language(context)
-    await update.message.reply_text(
-        f"Your staff language: {name}\nChoose the language for Meaning for Staff:",
-        reply_markup=staff_lang_keyboard(code),
-    )
+    await send_lang_picker(update, context, first_time=not staff_language_is_set(context))
+
+
+async def menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_staff_chat(update):
+        return
+    await send_main_menu(update, context)
 
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_staff_chat(update):
         await update.message.reply_text("This bot is for CHERRY staff only.")
         return
-    text = USAGE_TEXT
     if is_setup_mode():
-        text = f"{SETUP_HINT}\n\n{USAGE_TEXT}"
-    await update.message.reply_text(text)
+        await update.message.reply_text(f"{SETUP_HINT}\n\n{USAGE_TEXT}")
+    else:
+        await update.message.reply_text(USAGE_TEXT)
+    if not staff_language_is_set(context):
+        await send_lang_picker(update, context, first_time=True)
+    else:
+        await send_main_menu(update, context)
 
 
 async def group_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1111,26 +1204,6 @@ def resolve_pending_staff_case(
             logger.info("staff reply matched persisted prompt user=%s", user.id)
             return dict(mem)
 
-    active = get_active_case(context, chat.id)
-    if reply_to and active:
-        stage1_id = active.get("stage1_message_id")
-        reply_id = reply_to.message_id
-        if stage1_id is not None and reply_id == int(stage1_id):
-            logger.info(
-                "STAFF_REPLY matched stage1 swipe-reply user=%s support_id=%s",
-                user.id,
-                active.get("support_id"),
-            )
-            return active
-        reply_message_id = active.get("reply_message_id")
-        if reply_message_id is not None and reply_id == int(reply_message_id):
-            logger.info(
-                "STAFF_REPLY matched stage2 swipe-reply user=%s support_id=%s",
-                user.id,
-                active.get("support_id"),
-            )
-            return active
-
     gate_case = find_staff_reply_case(context, chat.id, user.id)
     if gate_case:
         return gate_case
@@ -1321,14 +1394,59 @@ async def intercept_staff_reply_input(update: Update, context: ContextTypes.DEFA
     )
 
 
-async def handle_customer_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Group 1 — new customer paste only; never runs while staff_reply_mode is active."""
+async def process_customer_ask_input(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    text: str,
+    telegram_id: int | None,
+    order_id: str,
+) -> None:
+    message = update.effective_message
+    chat = update.effective_chat
+    user = update.effective_user
+    if not message or not chat or not user:
+        return
+
+    clear_customer_ask_mode(context)
+    staff_lang, staff_lang_name = get_staff_language(context)
+
+    try:
+        await message.chat.send_action("typing")
+        understanding = await asyncio.to_thread(
+            draft_understand,
+            text,
+            staff_language=staff_lang,
+            staff_language_name=staff_lang_name,
+        )
+        card = format_stage1_card(text, understanding, staff_lang_code=staff_lang)
+        sent = await message.reply_text(card, reply_markup=stage1_keyboard())
+        save_active_case(
+            context,
+            new_case_payload(
+                question=text,
+                understanding=understanding,
+                telegram_id=telegram_id,
+                order_id=order_id,
+                stage1_message_id=sent.message_id,
+                staff_lang=staff_lang,
+                staff_lang_name=staff_lang_name,
+            ),
+            chat_id=chat.id,
+        )
+    except Exception:
+        logger.exception("process_customer_ask_input failed for text=%r", text[:120])
+        await message.reply_text("⚠️ Could not translate. Send /health to check OpenAI.")
+
+
+async def handle_staff_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Only process text after staff pressed 📩 Customer Asked or ✍️ Staff Reply."""
     if not is_staff_chat(update):
         return
     message = update.effective_message
     if not message or not message.text:
         if message and message.caption:
-            await message.reply_text("Photo received — please paste the customer's text question as well.")
+            await message.reply_text("Please paste text, not photo.")
         return
 
     raw_text = message.text.strip()
@@ -1338,6 +1456,10 @@ async def handle_customer_message(update: Update, context: ContextTypes.DEFAULT_
     user = update.effective_user
     chat = update.effective_chat
     if not user or not chat:
+        return
+
+    if not staff_language_is_set(context):
+        await send_lang_picker(update, context, first_time=True)
         return
 
     if context.chat_data.get(STAFF_REPLY_HANDLED_MSG_KEY) == message.message_id:
@@ -1356,104 +1478,86 @@ async def handle_customer_message(update: Update, context: ContextTypes.DEFAULT_
         return
 
     if find_staff_reply_case(context, chat.id, user.id):
-        logger.warning(
-            "blocked customer handler — staff_reply_mode still active chat=%s user=%s",
-            chat.id,
-            user.id,
-        )
         return
 
-    text, telegram_id, order_id = extract_message_context(message)
-    if not text:
-        return
-
-    if is_setup_mode():
-        await message.reply_text(SETUP_HINT)
-        return
-
-    logger.info(
-        "stage1 chat=%s user=%s text=%r",
-        chat.id,
-        user.id,
-        text[:120],
-    )
-
-    try:
-        await message.chat.send_action("typing")
-        staff_lang, staff_lang_name = get_staff_language(context)
-        understanding = await asyncio.to_thread(
-            draft_understand,
-            text,
-            staff_language=staff_lang,
-            staff_language_name=staff_lang_name,
-        )
-        card = format_stage1_card(text, understanding, staff_lang_code=staff_lang)
-        sent = await message.reply_text(card, reply_markup=stage1_keyboard())
-
-        save_active_case(
+    if customer_ask_mode_active(context, user.id):
+        text, telegram_id, order_id = extract_message_context(message)
+        if not text:
+            await message.reply_text("Paste the customer message text.")
+            return
+        if is_setup_mode():
+            await message.reply_text(SETUP_HINT)
+            return
+        await process_customer_ask_input(
+            update,
             context,
-            new_case_payload(
-                question=text,
-                understanding=understanding,
-                telegram_id=telegram_id,
-                order_id=order_id,
-                stage1_message_id=sent.message_id,
-                staff_lang=staff_lang,
-                staff_lang_name=staff_lang_name,
-            ),
-            chat_id=chat.id,
+            text=text,
+            telegram_id=telegram_id,
+            order_id=order_id,
         )
-    except Exception:
-        logger.exception("handle_customer_message failed for text=%r", text[:120])
-        await message.reply_text(
-            "⚠️ Could not read message. Send /health to check OpenAI, then try again."
-        )
+        return
+
+    code, name = get_staff_language(context)
+    await message.reply_text(
+        f"Press a button first.\nYour language: {name}\n{MENU_HINT}",
+        reply_markup=main_menu_keyboard(staff_lang_code=code),
+    )
 
 
 async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    if not is_staff_chat(update):
+    if not is_staff_chat(update) or not query.message or not query.from_user:
         return
 
     action = (query.data or "").split(":", 1)[-1]
-    stored = context.chat_data.get(ACTIVE_CASE_KEY)
-    if not isinstance(stored, dict):
-        by_chat = context.application.bot_data.get("staff_ai_by_chat", {})
-        fallback = by_chat.get(str(query.message.chat_id))
-        stored = fallback if isinstance(fallback, dict) else None
-    if not isinstance(stored, dict):
-        await query.message.reply_text("Paste a customer message first.")
-        return
+    chat_id = query.message.chat_id
+    user_id = query.from_user.id
 
-    question = str(stored.get("question", "") or "").strip()
-    if not question:
-        await query.message.reply_text("Paste a customer message first.")
-        return
-
-    if action == "cancel":
-        if query.message and query.from_user:
-            clear_staff_reply_wait(context, query.message.chat_id, query.from_user.id)
-        context.chat_data.pop(ACTIVE_CASE_KEY, None)
-        try:
-            await query.edit_message_reply_markup(reply_markup=None)
-        except Exception:
-            pass
-        await query.message.reply_text("Cancelled.")
+    if action == "main_menu":
+        await send_main_menu(update, context)
         return
 
     if action == "lang_menu":
-        code, name = get_staff_language(context)
-        await query.message.reply_text(
-            f"Your staff language: {name}\nChoose the language for Meaning for Staff:",
-            reply_markup=staff_lang_keyboard(code),
-        )
+        await send_lang_picker(update, context, first_time=not staff_language_is_set(context))
         return
 
     if action.startswith("lang:"):
         picked = action.split(":", 1)[1]
         code, name = set_staff_language(context, picked)
-        await query.message.reply_text(f"Staff language set to {name}.")
+        clear_customer_ask_mode(context)
+        await query.message.reply_text(
+            f"Your language: {name}\n{MENU_HINT}",
+            reply_markup=main_menu_keyboard(staff_lang_code=code),
+        )
+        return
+
+    if action == "customer_ask":
+        if not staff_language_is_set(context):
+            await send_lang_picker(update, context, first_time=True)
+            return
+        clear_staff_reply_wait(context, chat_id, user_id, log_exit=False)
+        set_customer_ask_mode(context, user_id)
+        code, _ = get_staff_language(context)
+        await query.message.reply_text(
+            CUSTOMER_ASK_PROMPT,
+            reply_markup=main_menu_keyboard(staff_lang_code=code),
+        )
+        return
+
+    if action == "cancel":
+        clear_staff_reply_wait(context, chat_id, user_id)
+        clear_customer_ask_mode(context)
+        context.chat_data.pop(ACTIVE_CASE_KEY, None)
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        code, _ = get_staff_language(context)
+        await query.message.reply_text(
+            "Cancelled.",
+            reply_markup=main_menu_keyboard(staff_lang_code=code),
+        )
         return
 
     if action == "cancel_reply":
@@ -1461,22 +1565,28 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             await query.edit_message_reply_markup(reply_markup=None)
         except Exception:
             pass
-        await query.message.reply_text("Reply dismissed. Copy manually if needed.")
+        code, _ = get_staff_language(context)
+        await query.message.reply_text(
+            "Reply dismissed.",
+            reply_markup=main_menu_keyboard(staff_lang_code=code),
+        )
+        return
+
+    stored = get_active_case(context, chat_id)
+    if not isinstance(stored, dict) or not str(stored.get("question", "") or "").strip():
+        await query.message.reply_text(
+            "Press 📩 Customer Asked first, then paste the customer message."
+        )
         return
 
     if action == "staff_reply":
-        if not query.message or not query.from_user:
-            if query.message:
-                await query.message.reply_text("Could not start Reply Customer — try again.")
+        if not staff_language_is_set(context):
+            await send_lang_picker(update, context, first_time=True)
             return
-        payload = bind_staff_reply_wait(
-            context,
-            query.message.chat_id,
-            query.from_user.id,
-            stored,
-        )
+        clear_customer_ask_mode(context)
+        payload = bind_staff_reply_wait(context, chat_id, user_id, stored)
         sent = await context.bot.send_message(
-            chat_id=query.message.chat_id,
+            chat_id=chat_id,
             text=STAFF_REPLY_PROMPT,
             reply_markup=ForceReply(selective=True),
             reply_to_message_id=query.message.message_id,
@@ -1484,8 +1594,8 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         payload["staff_reply_prompt_id"] = sent.message_id
         _PROMPT_TO_CASE[sent.message_id] = dict(payload)
         prompts = context.application.bot_data.setdefault("staff_ai_prompts", {})
-        prompts[str(sent.message_id)] = _await_key(query.message.chat_id, query.from_user.id)
-        save_active_case(context, payload, chat_id=query.message.chat_id)
+        prompts[str(sent.message_id)] = _await_key(chat_id, user_id)
+        save_active_case(context, payload, chat_id=chat_id)
         return
 
     if action == "send":
@@ -1581,11 +1691,12 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("chatid", group_cmd))
     app.add_handler(CommandHandler("id", group_cmd))
     app.add_handler(CommandHandler("lang", lang_cmd))
+    app.add_handler(CommandHandler("menu", menu_cmd))
     app.add_handler(CommandHandler("health", health_cmd))
     app.add_handler(CallbackQueryHandler(staff_ai_callback, pattern=r"^staffai:"))
     text_filter = filters.TEXT & ~filters.COMMAND
     app.add_handler(MessageHandler(text_filter, intercept_staff_reply_input), group=0, block=False)
-    app.add_handler(MessageHandler(text_filter, handle_customer_message), group=1)
+    app.add_handler(MessageHandler(text_filter, handle_staff_text), group=1)
     return app
 
 
