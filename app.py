@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TWO-STAGE-V10-PRICING-KB"
+VERSION = "CHERRY STAFF AI - TWO-STAGE-V11-KM-GUIDE"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
@@ -74,8 +74,10 @@ class StaffUnderstanding:
 
 @dataclass
 class StaffReplyDraft:
-    staff_meaning: str
     customer_reply: str
+    reply_meaning_km: str = ""
+    next_steps_km: str = ""
+    staff_meaning: str = ""
 
 
 @dataclass
@@ -83,6 +85,8 @@ class StaffTranslationDraft:
     staff_wrote: str
     language_name: str
     translated_reply: str
+    reply_meaning_km: str = ""
+    next_steps_km: str = ""
 
 
 STAFF_REPLY_PROMPT = (
@@ -415,12 +419,13 @@ def build_reply_system_prompt(knowledge: str) -> str:
         f"{CHERRY_PRICING_CORE}\n"
         "Reply rules:\n"
         "- customer_reply: SHORT, casual, in the customer's language — easy to copy-paste.\n"
+        "- reply_meaning_km: 1–2 simple Khmer lines — translate/summarize what customer_reply tells the customer.\n"
+        "- next_steps_km: 1 short Khmer line — what Cambodian staff should do AFTER sending (copy, wait, follow up).\n"
         "- If customer asks price OR mentions little/small amount (sedikit/hanya/mahal/etc.):\n"
         "  MUST state relevant package price(s) and that CHERRY charges per MACHINE, not by clothing qty.\n"
-        "- staff_meaning: 1–2 simple Khmer lines for shop staff — include price rule when relevant.\n"
         "- Never use Khmer/Thai in customer_reply unless that IS the customer language.\n"
         "- No filler closings. Include facts staff need — do NOT give vague 'we can help' without prices.\n\n"
-        "Return JSON keys: staff_meaning, customer_reply\n\n"
+        "Return JSON keys: reply_meaning_km, next_steps_km, customer_reply\n\n"
         "Full knowledge base:\n"
         f"{knowledge}"
     )
@@ -447,7 +452,7 @@ def build_reply_user_prompt(
     mode: str = "normal",
     previous_reply: str = "",
 ) -> str:
-    meaning_block = f"Staff meaning: {staff_meaning}\n\n" if staff_meaning else ""
+    meaning_block = f"Customer question meaning (Khmer): {staff_meaning}\n\n" if staff_meaning else ""
     lang_name = language_name.strip() or "the customer's language"
     lang_code = customer_language.strip() or "auto"
     language_block = (
@@ -464,6 +469,7 @@ def build_reply_user_prompt(
             f"{meaning_block}{language_block}{topic_block}"
             f"Customer message:\n{customer_text}\n\n"
             f"Make customer_reply MUCH shorter in {lang_name} — max 15 words.\n"
+            f"Update reply_meaning_km and next_steps_km in Khmer to match.\n"
             f"Keep any required price facts from CHERRY_PRICING_CORE.\n"
             f"Previous customer_reply:\n{previous_reply}"
         )
@@ -472,6 +478,7 @@ def build_reply_user_prompt(
             f"{meaning_block}{language_block}{topic_block}"
             f"Customer message:\n{customer_text}\n\n"
             f"Rewrite customer_reply in {lang_name} with different wording. Same facts and prices.\n"
+            f"Update reply_meaning_km and next_steps_km in Khmer to match.\n"
             f"Previous customer_reply:\n{previous_reply}"
         )
     return (
@@ -509,19 +516,22 @@ def understanding_from_payload(payload: dict[str, Any]) -> StaffUnderstanding:
 def reply_from_payload(payload: dict[str, Any], *, mode: str = "normal") -> StaffReplyDraft:
     max_words = 15 if mode == "shorter" else 40
     max_chars = 120 if mode == "shorter" else 320
-    meaning = str(
-        payload.get("staff_meaning")
+    reply_meaning = str(
+        payload.get("reply_meaning_km")
+        or payload.get("staff_meaning")
         or payload.get("staff_layer_km")
-        or payload.get("staff_layer_th")
         or ""
     ).strip()
+    next_steps = str(payload.get("next_steps_km") or "").strip()
     return StaffReplyDraft(
-        staff_meaning=meaning or "—",
         customer_reply=clamp_customer_reply(
             str(payload.get("customer_reply", "") or FALLBACK_EN),
             max_words=max_words,
             max_chars=max_chars,
         ),
+        reply_meaning_km=reply_meaning or "—",
+        next_steps_km=next_steps or "—",
+        staff_meaning=reply_meaning or "—",
     )
 
 
@@ -562,13 +572,15 @@ def draft_customer_reply(
     client = openai_client()
     if not client:
         return StaffReplyDraft(
-            staff_meaning=staff_meaning or "⚠️ OPENAI_API_KEY not set",
             customer_reply=FALLBACK_EN,
+            reply_meaning_km=staff_meaning or "⚠️ OPENAI_API_KEY not set",
+            next_steps_km="—",
+            staff_meaning=staff_meaning or "⚠️ OPENAI_API_KEY not set",
         )
 
     kb = knowledge or load_knowledge()
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
-    max_tokens = 180 if mode == "shorter" else 320
+    max_tokens = 220 if mode == "shorter" else 420
     try:
         response = client.chat.completions.create(
             model=model,
@@ -592,14 +604,21 @@ def draft_customer_reply(
         )
         raw = response.choices[0].message.content or "{}"
         draft = reply_from_payload(parse_llm_json(raw), mode=mode)
-        if staff_meaning and draft.staff_meaning == "—":
-            draft = StaffReplyDraft(staff_meaning=staff_meaning, customer_reply=draft.customer_reply)
+        if staff_meaning and draft.reply_meaning_km == "—":
+            draft = StaffReplyDraft(
+                customer_reply=draft.customer_reply,
+                reply_meaning_km=staff_meaning,
+                next_steps_km=draft.next_steps_km,
+                staff_meaning=staff_meaning,
+            )
         return draft
     except Exception as exc:
         logger.exception("OpenAI reply draft failed")
         return StaffReplyDraft(
-            staff_meaning=staff_meaning or f"⚠️ {openai_error_hint(exc)}",
             customer_reply=FALLBACK_EN,
+            reply_meaning_km=staff_meaning or f"⚠️ {openai_error_hint(exc)}",
+            next_steps_km="—",
+            staff_meaning=staff_meaning or f"⚠️ {openai_error_hint(exc)}",
         )
 
 
@@ -610,8 +629,10 @@ def build_translate_system_prompt() -> str:
         "Short casual chat style — easy to copy-paste. No filler closings.\n"
         "CRITICAL: translated_reply must be in the target customer language ONLY — "
         "never Khmer or Thai unless the target language is Khmer/Thai.\n\n"
-        "Return a single JSON object with exactly this key:\n"
-        "  translated_reply — staff message translated into the target customer language"
+        "Also explain for Cambodian shop staff in simple Khmer:\n"
+        "- reply_meaning_km: what the translated_reply tells the customer (1–2 short lines)\n"
+        "- next_steps_km: what staff should do after sending (1 short line)\n\n"
+        "Return JSON keys: translated_reply, reply_meaning_km, next_steps_km"
     )
 
 
@@ -663,6 +684,25 @@ def translation_from_payload(payload: dict[str, Any], *, mode: str = "normal") -
     )
 
 
+def translation_draft_from_payload(
+    payload: dict[str, Any],
+    *,
+    staff_text: str,
+    language_name: str,
+    mode: str = "normal",
+) -> StaffTranslationDraft:
+    translated = translation_from_payload(payload, mode=mode)
+    reply_meaning = str(payload.get("reply_meaning_km") or "").strip()
+    next_steps = str(payload.get("next_steps_km") or "").strip()
+    return StaffTranslationDraft(
+        staff_wrote=staff_text,
+        language_name=language_name,
+        translated_reply=translated or staff_text,
+        reply_meaning_km=reply_meaning or "—",
+        next_steps_km=next_steps or "—",
+    )
+
+
 def draft_staff_translation(
     staff_text: str,
     *,
@@ -681,7 +721,7 @@ def draft_staff_translation(
         )
 
     model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
-    max_tokens = 120 if mode == "shorter" else 220
+    max_tokens = 180 if mode == "shorter" else 320
     try:
         response = client.chat.completions.create(
             model=model,
@@ -704,20 +744,29 @@ def draft_staff_translation(
             ],
         )
         raw = response.choices[0].message.content or "{}"
-        translated = translation_from_payload(parse_llm_json(raw), mode=mode)
-        if not translated or translated == FALLBACK_EN:
-            translated = staff_text
-        return StaffTranslationDraft(
-            staff_wrote=staff_text,
+        draft = translation_draft_from_payload(
+            parse_llm_json(raw),
+            staff_text=staff_text,
             language_name=language_name,
-            translated_reply=translated,
+            mode=mode,
         )
+        if not draft.translated_reply or draft.translated_reply == FALLBACK_EN:
+            draft = StaffTranslationDraft(
+                staff_wrote=staff_text,
+                language_name=language_name,
+                translated_reply=staff_text,
+                reply_meaning_km=draft.reply_meaning_km,
+                next_steps_km=draft.next_steps_km,
+            )
+        return draft
     except Exception as exc:
         logger.exception("OpenAI staff translation failed")
         return StaffTranslationDraft(
             staff_wrote=staff_text,
             language_name=language_name,
             translated_reply=f"⚠️ {openai_error_hint(exc)}",
+            reply_meaning_km="—",
+            next_steps_km="—",
         )
 
 
@@ -744,18 +793,28 @@ def format_stage1_card(original_text: str, understanding: StaffUnderstanding) ->
 def format_stage2_card(
     draft: StaffReplyDraft,
     *,
+    question_meaning: str = "",
     language_name: str = "",
     mode_label: str = "",
 ) -> str:
     header = "🤖 CHERRY AI Reply"
     if mode_label:
         header = f"{header} · {mode_label}"
-    lines = [
-        header,
+    lines = [header, ""]
+    q_meaning = question_meaning.strip() or draft.staff_meaning.strip()
+    if q_meaning and q_meaning != "—":
+        lines.extend([
+            "👀 Customer asked / អតិថិជនសួរ",
+            q_meaning,
+            "",
+        ])
+    lines.extend([
+        "📖 Reply means / បកប្រែចម្លើយ",
+        draft.reply_meaning_km or "—",
         "",
-        "👀 Meaning for Staff",
-        draft.staff_meaning,
-    ]
+        "👉 Next step / បន្ទាប់",
+        draft.next_steps_km or "—",
+    ])
     if language_name.strip():
         lines.extend(["", "🌐 Customer Language", language_name.strip()])
     lines.extend([
@@ -772,16 +831,28 @@ def format_stage2_card(
 def format_staff_translation_card(
     draft: StaffTranslationDraft,
     *,
+    question_meaning: str = "",
     mode_label: str = "",
 ) -> str:
     header = "🤖 CHERRY AI Reply"
     if mode_label:
         header = f"{header} · {mode_label}"
-    return "\n".join([
-        header,
-        "",
+    lines = [header, ""]
+    if question_meaning.strip():
+        lines.extend([
+            "👀 Customer asked / អតិថិជនសួរ",
+            question_meaning.strip(),
+            "",
+        ])
+    lines.extend([
         "👩🏼‍💻 Staff /បុគ្គលិក",
         draft.staff_wrote,
+        "",
+        "📖 Reply means / បកប្រែចម្លើយ",
+        draft.reply_meaning_km or "—",
+        "",
+        "👉 Next step / បន្ទាប់",
+        draft.next_steps_km or "—",
         "",
         "🌐 Customer Language",
         draft.language_name,
@@ -792,6 +863,7 @@ def format_staff_translation_card(
         "━━━━━━━━━━━━━━",
         "⚠️ Check before send",
     ])
+    return "\n".join(lines)
 
 
 def stage1_keyboard() -> InlineKeyboardMarkup:
@@ -1075,7 +1147,12 @@ async def process_staff_reply_input(
             customer_original=str(stored.get("question", "") or ""),
         )
         stored["customer_reply"] = draft.translated_reply
-        card = format_staff_translation_card(draft)
+        stored["reply_meaning_km"] = draft.reply_meaning_km
+        stored["next_steps_km"] = draft.next_steps_km
+        card = format_staff_translation_card(
+            draft,
+            question_meaning=str(stored.get("staff_meaning", "") or ""),
+        )
         await send_stage2_reply(message=message, context=context, stored=stored, card=card)
     except Exception:
         logger.exception("staff reply translation failed")
@@ -1095,6 +1172,8 @@ def new_case_payload(
         "detected_language": understanding.detected_language,
         "language_name": understanding.language_name,
         "staff_meaning": understanding.staff_meaning,
+        "reply_meaning_km": "",
+        "next_steps_km": "",
         "customer_reply": "",
         "reply_source": "ai",
         "staff_wrote": "",
@@ -1246,10 +1325,12 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             language_name=str(stored.get("language_name", "") or ""),
             knowledge=load_knowledge(),
         )
-        stored["staff_meaning"] = draft.staff_meaning
+        stored["reply_meaning_km"] = draft.reply_meaning_km
+        stored["next_steps_km"] = draft.next_steps_km
         stored["customer_reply"] = draft.customer_reply
         card = format_stage2_card(
             draft,
+            question_meaning=staff_meaning,
             language_name=str(stored.get("language_name", "") or ""),
         )
         await send_stage2_reply(message=query.message, context=context, stored=stored, card=card)
@@ -1318,7 +1399,13 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             previous_reply=previous,
         )
         stored["customer_reply"] = draft.translated_reply
-        card = format_staff_translation_card(draft, mode_label=label)
+        stored["reply_meaning_km"] = draft.reply_meaning_km
+        stored["next_steps_km"] = draft.next_steps_km
+        card = format_staff_translation_card(
+            draft,
+            question_meaning=staff_meaning,
+            mode_label=label,
+        )
     else:
         draft = await asyncio.to_thread(
             draft_customer_reply,
@@ -1330,10 +1417,12 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             previous_reply=previous,
             knowledge=load_knowledge(),
         )
-        stored["staff_meaning"] = draft.staff_meaning
+        stored["reply_meaning_km"] = draft.reply_meaning_km
+        stored["next_steps_km"] = draft.next_steps_km
         stored["customer_reply"] = draft.customer_reply
         card = format_stage2_card(
             draft,
+            question_meaning=staff_meaning,
             language_name=str(stored.get("language_name", "") or ""),
             mode_label=label,
         )
