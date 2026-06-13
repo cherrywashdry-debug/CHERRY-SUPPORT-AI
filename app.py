@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TWO-STAGE-V12-CARD-LAYOUT"
+VERSION = "CHERRY STAFF AI - TWO-STAGE-V13-KM-FIX"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
@@ -97,6 +97,12 @@ STAFF_REPLY_PROMPT = (
 )
 
 STAGE2_FOOTER = "⚠️ Check before send/ពិនិត្យមុននិងផ្ញើ"
+
+KHMER_SCRIPT_RE = re.compile(r"[\u1780-\u17FF]")
+
+
+def looks_like_khmer(text: str) -> bool:
+    return bool(KHMER_SCRIPT_RE.search(str(text or "")))
 
 
 def stage2_header(mode_label: str = "") -> str:
@@ -371,8 +377,9 @@ def message_topic_hints(text: str) -> list[str]:
         )
     if any(w in lower for w in qty_words):
         hints.append(
-            "SMALL/LITTLE quantity — customer may think price depends on amount. "
-            "staff_meaning MUST note: CHERRY charges per machine (210/240/270/300 B), not by clothing qty."
+            "SMALL/LITTLE quantity — customer_reply MUST explain per-machine pricing: "
+            "14kg 210-240 B, 18kg 270-300 B (NOT by clothing qty). "
+            "reply_meaning_km in Khmer: explain same rule to staff."
         )
     if any(w in lower for w in package_words) and not any(w in lower for w in price_words):
         hints.append("Package/size topic — mention 14 kg vs 18 kg options when relevant.")
@@ -436,15 +443,20 @@ def build_reply_system_prompt(knowledge: str) -> str:
         "Use ONLY facts from CHERRY_PRICING_CORE and the knowledge base below.\n"
         "Never invent prices, promotions, or policies. Never promise refunds or point changes.\n\n"
         f"{CHERRY_PRICING_CORE}\n"
+        "CRITICAL — three JSON fields, THREE different languages:\n"
+        "1) reply_meaning_km → Khmer script ONLY (ភាសាខ្មែរ). For Cambodian staff. "
+        "NEVER Indonesian/English/Thai/Malay in this field.\n"
+        "2) customer_reply → customer's language ONLY. NEVER Khmer/Thai unless customer speaks them.\n"
+        "3) next_steps_km → optional Khmer script ONLY.\n\n"
         "Reply rules:\n"
-        "- customer_reply: SHORT, casual, in the customer's language — easy to copy-paste.\n"
-        "- reply_meaning_km: 1–2 simple Khmer lines — what customer_reply tells the customer "
-        "(and briefly what staff should do next, if relevant).\n"
-        "- next_steps_km: optional extra Khmer line for staff follow-up (may duplicate reply_meaning_km).\n"
-        "- If customer asks price OR mentions little/small amount (sedikit/hanya/mahal/etc.):\n"
-        "  MUST state relevant package price(s) and that CHERRY charges per MACHINE, not by clothing qty.\n"
-        "- Never use Khmer/Thai in customer_reply unless that IS the customer language.\n"
-        "- No filler closings. Include facts staff need — do NOT give vague 'we can help' without prices.\n\n"
+        "- reply_meaning_km: simple Khmer — what customer_reply tells the customer + copy/send next step.\n"
+        "- customer_reply: SHORT casual copy-paste text in the customer's language.\n"
+        "- Price/qty topics: customer_reply MUST cite 14kg 210-240 B and/or 18kg 270-300 B per machine.\n"
+        "- No vague 'we can help' without prices when price/qty is the topic.\n\n"
+        "Example for Indonesian customer with little laundry:\n"
+        '{"reply_meaning_km":"យើងប្រាប់អតិថិជនថាតម្លៃតាមម៉ាស៊ីន 14kg 210-240฿, 18kg 270-300฿ — មិនតាមចំនួនអាវ. ចម្លងផ្ញើរង់ចាំ",'
+        '"next_steps_km":"ចម្លងទៅអតិថិជន",'
+        '"customer_reply":"Kami kenakan biaya per paket mesin, bukan jumlah pakaian. 14kg 210-240 Baht, 18kg 270-300 Baht."}\n\n'
         "Return JSON keys: reply_meaning_km, next_steps_km, customer_reply\n\n"
         "Full knowledge base:\n"
         f"{knowledge}"
@@ -504,7 +516,8 @@ def build_reply_user_prompt(
     return (
         f"{meaning_block}{language_block}{topic_block}"
         f"Customer message:\n{customer_text}\n\n"
-        f"Draft a short customer-safe reply in {lang_name} using CHERRY locked prices when relevant."
+        f"Draft customer_reply in {lang_name} only. "
+        "reply_meaning_km and next_steps_km MUST use Khmer script only — never {lang_name}."
     )
 
 
@@ -552,6 +565,76 @@ def reply_from_payload(payload: dict[str, Any], *, mode: str = "normal") -> Staf
         reply_meaning_km=reply_meaning or "—",
         next_steps_km=next_steps or "—",
         staff_meaning=reply_meaning or "—",
+    )
+
+
+def draft_khmer_reply_meaning(
+    *,
+    customer_reply: str,
+    customer_question: str = "",
+    question_meaning_km: str = "",
+) -> str:
+    """Focused Khmer-only summary when the main draft puts wrong language in reply_meaning_km."""
+    client = openai_client()
+    if not client:
+        return question_meaning_km or "—"
+
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            temperature=0.1,
+            max_tokens=160,
+            response_format={"type": "json_object"},
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Write for Cambodian shop staff in Khmer script ONLY.\n"
+                        "Explain in 1-2 simple lines:\n"
+                        "1) What the customer_reply tells the customer\n"
+                        "2) What staff should do next (copy/send/wait)\n"
+                        "NEVER use Indonesian, English, Thai, or Malay."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Customer wrote: {customer_question.strip() or '(unknown)'}\n"
+                        f"Customer meaning: {question_meaning_km.strip() or '(unknown)'}\n\n"
+                        f"Reply we will send to customer:\n{customer_reply.strip()}\n\n"
+                        'Return JSON: {"reply_meaning_km":"..."}'
+                    ),
+                },
+            ],
+        )
+        raw = response.choices[0].message.content or "{}"
+        meaning = str(parse_llm_json(raw).get("reply_meaning_km", "") or "").strip()
+        if looks_like_khmer(meaning):
+            return meaning
+    except Exception:
+        logger.exception("Khmer reply meaning repair failed")
+    return question_meaning_km or "—"
+
+
+def ensure_khmer_reply_meaning(
+    draft: StaffReplyDraft,
+    *,
+    customer_question: str = "",
+    question_meaning_km: str = "",
+) -> StaffReplyDraft:
+    if looks_like_khmer(draft.reply_meaning_km):
+        return draft
+    repaired = draft_khmer_reply_meaning(
+        customer_reply=draft.customer_reply,
+        customer_question=customer_question,
+        question_meaning_km=question_meaning_km,
+    )
+    return StaffReplyDraft(
+        customer_reply=draft.customer_reply,
+        reply_meaning_km=repaired,
+        next_steps_km=draft.next_steps_km,
+        staff_meaning=draft.staff_meaning,
     )
 
 
@@ -624,6 +707,11 @@ def draft_customer_reply(
         )
         raw = response.choices[0].message.content or "{}"
         draft = reply_from_payload(parse_llm_json(raw), mode=mode)
+        draft = ensure_khmer_reply_meaning(
+            draft,
+            customer_question=customer_text,
+            question_meaning_km=staff_meaning,
+        )
         if staff_meaning and draft.reply_meaning_km == "—":
             draft = StaffReplyDraft(
                 customer_reply=draft.customer_reply,
@@ -649,9 +737,8 @@ def build_translate_system_prompt() -> str:
         "Short casual chat style — easy to copy-paste. No filler closings.\n"
         "CRITICAL: translated_reply must be in the target customer language ONLY — "
         "never Khmer or Thai unless the target language is Khmer/Thai.\n\n"
-        "Also explain for Cambodian shop staff in simple Khmer:\n"
-        "- reply_meaning_km: what the translated_reply tells the customer (1–2 short lines)\n"
-        "- next_steps_km: what staff should do after sending (1 short line)\n\n"
+        "CRITICAL: translated_reply in target language ONLY. "
+        "reply_meaning_km and next_steps_km in Khmer script ONLY — never Indonesian/English/Thai.\n\n"
         "Return JSON keys: translated_reply, reply_meaning_km, next_steps_km"
     )
 
@@ -778,6 +865,18 @@ def draft_staff_translation(
                 reply_meaning_km=draft.reply_meaning_km,
                 next_steps_km=draft.next_steps_km,
             )
+        if not looks_like_khmer(draft.reply_meaning_km):
+            repaired = draft_khmer_reply_meaning(
+                customer_reply=draft.translated_reply,
+                customer_question=customer_original,
+            )
+            draft = StaffTranslationDraft(
+                staff_wrote=draft.staff_wrote,
+                language_name=draft.language_name,
+                translated_reply=draft.translated_reply,
+                reply_meaning_km=repaired,
+                next_steps_km=draft.next_steps_km,
+            )
         return draft
     except Exception as exc:
         logger.exception("OpenAI staff translation failed")
@@ -810,22 +909,40 @@ def format_stage1_card(original_text: str, understanding: StaffUnderstanding) ->
     ])
 
 
+def format_customer_asked_block(
+    *,
+    customer_question: str = "",
+    question_meaning: str = "",
+) -> list[str]:
+    question = customer_question.strip()
+    meaning = question_meaning.strip()
+    if not question and not meaning:
+        return []
+    lines = ["Customer asked / អតិថិជនសួរ"]
+    if question:
+        lines.append(question)
+    if meaning and meaning != question:
+        lines.append(f"→ {meaning}")
+    elif meaning and not question:
+        lines.append(meaning)
+    lines.append("")
+    return lines
+
+
 def format_stage2_card(
     draft: StaffReplyDraft,
     *,
+    customer_question: str = "",
     question_meaning: str = "",
     language_name: str = "",
     language_code: str = "",
     mode_label: str = "",
 ) -> str:
     lines = [stage2_header(mode_label), ""]
-    q_meaning = question_meaning.strip() or draft.staff_meaning.strip()
-    if q_meaning and q_meaning != "—":
-        lines.extend([
-            "Customer asked / អតិថិជនសួរ",
-            q_meaning,
-            "",
-        ])
+    lines.extend(format_customer_asked_block(
+        customer_question=customer_question,
+        question_meaning=question_meaning,
+    ))
     lines.extend([
         "📖 Reply means / ចម្លើយដែលឆ្លើយ",
         draft.reply_meaning_km or "—",
@@ -844,17 +961,16 @@ def format_stage2_card(
 def format_staff_translation_card(
     draft: StaffTranslationDraft,
     *,
+    customer_question: str = "",
     question_meaning: str = "",
     language_code: str = "",
     mode_label: str = "",
 ) -> str:
     lines = [stage2_header(mode_label), ""]
-    if question_meaning.strip():
-        lines.extend([
-            "Customer asked / អតិថិជនសួរ",
-            question_meaning.strip(),
-            "",
-        ])
+    lines.extend(format_customer_asked_block(
+        customer_question=customer_question,
+        question_meaning=question_meaning,
+    ))
     lines.extend([
         "👩🏼‍💻 Staff /បុគ្គលិក",
         draft.staff_wrote,
@@ -1158,6 +1274,7 @@ async def process_staff_reply_input(
         stored["next_steps_km"] = draft.next_steps_km
         card = format_staff_translation_card(
             draft,
+            customer_question=str(stored.get("question", "") or ""),
             question_meaning=str(stored.get("staff_meaning", "") or ""),
             language_code=str(stored.get("detected_language", "") or ""),
         )
@@ -1338,6 +1455,7 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         stored["customer_reply"] = draft.customer_reply
         card = format_stage2_card(
             draft,
+            customer_question=question,
             question_meaning=staff_meaning,
             language_name=str(stored.get("language_name", "") or ""),
             language_code=str(stored.get("detected_language", "") or ""),
@@ -1412,6 +1530,7 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         stored["next_steps_km"] = draft.next_steps_km
         card = format_staff_translation_card(
             draft,
+            customer_question=question,
             question_meaning=staff_meaning,
             language_code=str(stored.get("detected_language", "") or ""),
             mode_label=label,
@@ -1432,6 +1551,7 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         stored["customer_reply"] = draft.customer_reply
         card = format_stage2_card(
             draft,
+            customer_question=question,
             question_meaning=staff_meaning,
             language_name=str(stored.get("language_name", "") or ""),
             language_code=str(stored.get("detected_language", "") or ""),
