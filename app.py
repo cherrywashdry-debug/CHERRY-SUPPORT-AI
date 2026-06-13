@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TWO-STAGE-V7-KM-BUTTONS"
+VERSION = "CHERRY STAFF AI - TWO-STAGE-V8-KM-MEANING"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
@@ -252,11 +252,13 @@ def extract_message_context(message: Any) -> tuple[str, int | None, str]:
 def build_understand_system_prompt() -> str:
     return (
         "You are CHERRY Wash & Dry Poipet staff assistant.\n"
-        "Staff pasted a customer message. Do NOT draft a customer reply.\n"
+        "Staff are Cambodian. Staff pasted a customer message. Do NOT draft a customer reply.\n"
         "Return a single JSON object with exactly these keys:\n"
-        "  detected_language — short code (en, th, km, id, zh, ...)\n"
-        "  language_name — human-readable language name\n"
-        "  staff_meaning — ONE short line in Khmer OR Thai explaining what the customer is asking\n"
+        "  detected_language — accurate short code (en, th, km, id, zh, tl, ms, vi, ...)\n"
+        "  language_name — human-readable language name (e.g. Tagalog, Indonesian, Khmer)\n"
+        "  staff_meaning — ONE short line in Khmer script ONLY (ភាសាខ្មែរ). Never Thai.\n"
+        "Detect language carefully: Tagalog/Filipino (tl) uses words like mahal, po, lang, bakit — "
+        "NOT Khmer. Khmer (km) uses Khmer script or distinct Khmer romanization.\n"
         "Keep staff_meaning under 80 characters. No prices, no suggested reply."
     )
 
@@ -267,7 +269,7 @@ def build_reply_system_prompt(knowledge: str) -> str:
         "Use ONLY facts from the knowledge base below. Never invent prices or policies.\n"
         "Never promise refunds, compensation, point changes, or verified order status.\n\n"
         "Return a single JSON object with exactly these keys:\n"
-        "  staff_meaning — ONE short line in Khmer OR Thai ONLY (for staff to read)\n"
+        "  staff_meaning — ONE short line in Khmer script ONLY (for Cambodian staff). Never Thai.\n"
         "  customer_reply — SHORT reply in the CUSTOMER'S LANGUAGE specified in the user message\n"
         "  CRITICAL: customer_reply must NOT be in Khmer or Thai unless the customer language IS Khmer/Thai.\n"
         "  Style: casual chat, 1–3 short lines max, easy to copy.\n"
@@ -638,10 +640,8 @@ def format_staff_translation_card(
 
 def stage1_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("📝 Help Reply / ជួយឆ្លើយ", callback_data="staffai:help"),
-            InlineKeyboardButton("✍️ Staff Reply / បុគ្គលិកឆ្លើយ", callback_data="staffai:staff_reply"),
-        ],
+        [InlineKeyboardButton("📝 Help Reply / ជួយឆ្លើយ", callback_data="staffai:help")],
+        [InlineKeyboardButton("✍️ Staff Reply / បុគ្គលិកឆ្លើយ", callback_data="staffai:staff_reply")],
         [InlineKeyboardButton("❌ Cancel / បោះបង់", callback_data="staffai:cancel")],
     ])
 
