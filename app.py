@@ -38,7 +38,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TRANSLATOR-V4-MENU-BUTTONS"
+VERSION = "CHERRY STAFF AI - TRANSLATOR-V4-MENU-BUTTONS-R2"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
@@ -1368,32 +1368,6 @@ async def send_stage2_reply(
     save_active_case(context, stored, chat_id=stored.get("chat_id"))
 
 
-async def intercept_staff_reply_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Group 0 — must run before customer message handler."""
-    if not is_staff_chat(update):
-        return
-    message = update.effective_message
-    user = update.effective_user
-    chat = update.effective_chat
-    if not message or not message.text or not user or not chat:
-        return
-    raw_text = message.text.strip()
-    if raw_text.startswith("/"):
-        return
-
-    pending = resolve_pending_staff_case(update, context)
-    if not pending:
-        return
-
-    context.chat_data[STAFF_REPLY_HANDLED_MSG_KEY] = message.message_id
-    await process_staff_reply_input(
-        update,
-        context,
-        stored=pending,
-        staff_text=raw_text,
-    )
-
-
 async def process_customer_ask_input(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -1462,13 +1436,8 @@ async def handle_staff_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await send_lang_picker(update, context, first_time=True)
         return
 
-    if context.chat_data.get(STAFF_REPLY_HANDLED_MSG_KEY) == message.message_id:
-        context.chat_data.pop(STAFF_REPLY_HANDLED_MSG_KEY, None)
-        return
-
     pending = resolve_pending_staff_case(update, context)
     if pending:
-        context.chat_data[STAFF_REPLY_HANDLED_MSG_KEY] = message.message_id
         await process_staff_reply_input(
             update,
             context,
@@ -1705,9 +1674,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("menu", menu_cmd))
     app.add_handler(CommandHandler("health", health_cmd))
     app.add_handler(CallbackQueryHandler(staff_ai_callback, pattern=r"^staffai:"))
-    text_filter = filters.TEXT & ~filters.COMMAND
-    app.add_handler(MessageHandler(text_filter, intercept_staff_reply_input), group=0, block=False)
-    app.add_handler(MessageHandler(text_filter, handle_staff_text), group=1)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_staff_text))
     return app
 
 
