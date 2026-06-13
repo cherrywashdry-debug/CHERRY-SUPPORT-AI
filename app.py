@@ -38,7 +38,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TRANSLATOR-GTRANSLATE-V1"
+VERSION = "CHERRY STAFF AI - TRANSLATOR-GTRANSLATE-V2-REPLY-TO-CARD"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
@@ -79,6 +79,7 @@ class StaffTranslationDraft:
 
 STAFF_REPLY_PROMPT = (
     "✍️ Type your reply for the customer.\n"
+    "Reply to this message, reply to the card, or just type in the group.\n"
     "Thai, Khmer, English, or Indonesian are fine.\n"
     "AI will translate only — it will not add new information."
 )
@@ -1069,6 +1070,17 @@ def find_staff_reply_case(
     return None
 
 
+def get_active_case(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> dict[str, Any] | None:
+    stored = context.chat_data.get(ACTIVE_CASE_KEY)
+    if isinstance(stored, dict) and str(stored.get("question", "") or "").strip():
+        return dict(stored)
+    by_chat = context.application.bot_data.get("staff_ai_by_chat", {})
+    fallback = by_chat.get(str(chat_id))
+    if isinstance(fallback, dict) and str(fallback.get("question", "") or "").strip():
+        return dict(fallback)
+    return None
+
+
 def resolve_pending_staff_case(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -1099,7 +1111,31 @@ def resolve_pending_staff_case(
             logger.info("staff reply matched persisted prompt user=%s", user.id)
             return dict(mem)
 
-    return find_staff_reply_case(context, chat.id, user.id)
+    active = get_active_case(context, chat.id)
+    if reply_to and active:
+        stage1_id = active.get("stage1_message_id")
+        reply_id = reply_to.message_id
+        if stage1_id is not None and reply_id == int(stage1_id):
+            logger.info(
+                "STAFF_REPLY matched stage1 swipe-reply user=%s support_id=%s",
+                user.id,
+                active.get("support_id"),
+            )
+            return active
+        reply_message_id = active.get("reply_message_id")
+        if reply_message_id is not None and reply_id == int(reply_message_id):
+            logger.info(
+                "STAFF_REPLY matched stage2 swipe-reply user=%s support_id=%s",
+                user.id,
+                active.get("support_id"),
+            )
+            return active
+
+    gate_case = find_staff_reply_case(context, chat.id, user.id)
+    if gate_case:
+        return gate_case
+
+    return None
 
 
 def save_active_case(
@@ -1306,6 +1342,17 @@ async def handle_customer_message(update: Update, context: ContextTypes.DEFAULT_
 
     if context.chat_data.get(STAFF_REPLY_HANDLED_MSG_KEY) == message.message_id:
         context.chat_data.pop(STAFF_REPLY_HANDLED_MSG_KEY, None)
+        return
+
+    pending = resolve_pending_staff_case(update, context)
+    if pending:
+        context.chat_data[STAFF_REPLY_HANDLED_MSG_KEY] = message.message_id
+        await process_staff_reply_input(
+            update,
+            context,
+            stored=pending,
+            staff_text=raw_text,
+        )
         return
 
     if find_staff_reply_case(context, chat.id, user.id):
