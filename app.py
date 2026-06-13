@@ -36,7 +36,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TWO-STAGE-V3-LABELS"
+VERSION = "CHERRY STAFF AI - TWO-STAGE-V4-CUSTOMER-LANG"
 ROOT = Path(__file__).resolve().parent
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
 if not KNOWLEDGE_PATH.is_file():
@@ -263,8 +263,9 @@ def build_reply_system_prompt(knowledge: str) -> str:
         "Use ONLY facts from the knowledge base below. Never invent prices or policies.\n"
         "Never promise refunds, compensation, point changes, or verified order status.\n\n"
         "Return a single JSON object with exactly these keys:\n"
-        "  staff_meaning — ONE short line in Khmer OR Thai (same meaning as before)\n"
-        "  customer_reply — SHORT reply in THE CUSTOMER'S LANGUAGE for staff to copy-paste\n"
+        "  staff_meaning — ONE short line in Khmer OR Thai ONLY (for staff to read)\n"
+        "  customer_reply — SHORT reply in the CUSTOMER'S LANGUAGE specified in the user message\n"
+        "  CRITICAL: customer_reply must NOT be in Khmer or Thai unless the customer language IS Khmer/Thai.\n"
         "  Style: casual chat, 1–3 short lines max, easy to copy.\n"
         "  Answer only what they asked. No filler closings.\n\n"
         "Knowledge base:\n"
@@ -288,28 +289,37 @@ def build_reply_user_prompt(
     customer_text: str,
     *,
     staff_meaning: str = "",
+    customer_language: str = "",
+    language_name: str = "",
     mode: str = "normal",
     previous_reply: str = "",
 ) -> str:
     meaning_block = f"Staff meaning: {staff_meaning}\n\n" if staff_meaning else ""
+    lang_name = language_name.strip() or "the customer's language"
+    lang_code = customer_language.strip() or "auto"
+    language_block = (
+        f"Customer language: {lang_name} ({lang_code})\n"
+        f"Write customer_reply ONLY in {lang_name}. "
+        "Never use Khmer or Thai in customer_reply unless that IS the customer language.\n\n"
+    )
     if mode == "shorter":
         return (
-            f"{meaning_block}"
+            f"{meaning_block}{language_block}"
             f"Customer message:\n{customer_text}\n\n"
-            "Make customer_reply MUCH shorter — max 15 words, minimal facts only.\n"
+            f"Make customer_reply MUCH shorter in {lang_name} — max 15 words.\n"
             f"Previous customer_reply:\n{previous_reply}"
         )
     if mode == "rewrite":
         return (
-            f"{meaning_block}"
+            f"{meaning_block}{language_block}"
             f"Customer message:\n{customer_text}\n\n"
-            "Rewrite customer_reply with different wording. Same facts, same brevity.\n"
+            f"Rewrite customer_reply in {lang_name} with different wording. Same facts, same brevity.\n"
             f"Previous customer_reply:\n{previous_reply}"
         )
     return (
-        f"{meaning_block}"
+        f"{meaning_block}{language_block}"
         f"Customer message:\n{customer_text}\n\n"
-        "Draft a short customer-safe reply staff can copy."
+        f"Draft a short customer-safe reply in {lang_name} for staff to copy-paste."
     )
 
 
@@ -385,6 +395,8 @@ def draft_customer_reply(
     customer_text: str,
     *,
     staff_meaning: str = "",
+    customer_language: str = "",
+    language_name: str = "",
     mode: str = "normal",
     previous_reply: str = "",
     knowledge: str = "",
@@ -412,6 +424,8 @@ def draft_customer_reply(
                     "content": build_reply_user_prompt(
                         customer_text,
                         staff_meaning=staff_meaning,
+                        customer_language=customer_language,
+                        language_name=language_name,
                         mode=mode,
                         previous_reply=previous_reply,
                     ),
@@ -435,9 +449,11 @@ def build_translate_system_prompt() -> str:
     return (
         "You translate staff-written replies into the customer's language for CHERRY Wash & Dry.\n"
         "Keep the same meaning as staff wrote. Do not add new facts, prices, or promises.\n"
-        "Short casual chat style — easy to copy-paste. No filler closings.\n\n"
+        "Short casual chat style — easy to copy-paste. No filler closings.\n"
+        "CRITICAL: translated_reply must be in the target customer language ONLY — "
+        "never Khmer or Thai unless the target language is Khmer/Thai.\n\n"
         "Return a single JSON object with exactly this key:\n"
-        "  translated_reply — the staff message translated into the customer's language"
+        "  translated_reply — staff message translated into the target customer language"
     )
 
 
@@ -453,25 +469,29 @@ def build_translate_user_prompt(
     context_block = ""
     if customer_original.strip():
         context_block = f"Original customer message (context only):\n{customer_original.strip()}\n\n"
-    target = f"Target language: {language_name} ({customer_language})\n\n"
+    target = f"Target customer language: {language_name} ({customer_language})\n\n"
+    lang_rule = (
+        f"translated_reply MUST be in {language_name} only. "
+        "Do NOT output Khmer or Thai unless that is the target language.\n\n"
+    )
     if mode == "shorter":
         return (
-            f"{context_block}{target}"
+            f"{context_block}{target}{lang_rule}"
             f"Staff wrote:\n{staff_text}\n\n"
-            "Make translated_reply MUCH shorter — max 15 words.\n"
+            f"Make translated_reply MUCH shorter in {language_name} — max 15 words.\n"
             f"Previous translated_reply:\n{previous_reply}"
         )
     if mode == "rewrite":
         return (
-            f"{context_block}{target}"
+            f"{context_block}{target}{lang_rule}"
             f"Staff wrote:\n{staff_text}\n\n"
-            "Rewrite translated_reply with different wording. Same meaning, same brevity.\n"
+            f"Rewrite translated_reply in {language_name} with different wording. Same meaning.\n"
             f"Previous translated_reply:\n{previous_reply}"
         )
     return (
-        f"{context_block}{target}"
+        f"{context_block}{target}{lang_rule}"
         f"Staff wrote:\n{staff_text}\n\n"
-        "Translate to the customer language. Keep it short."
+        f"Translate to {language_name}."
     )
 
 
@@ -562,16 +582,21 @@ def format_stage1_card(original_text: str, understanding: StaffUnderstanding) ->
 def format_stage2_card(
     draft: StaffReplyDraft,
     *,
+    language_name: str = "",
     mode_label: str = "",
 ) -> str:
     header = "🤖 CHERRY AI Reply"
     if mode_label:
         header = f"{header} · {mode_label}"
-    return "\n".join([
+    lines = [
         header,
         "",
         "👀 Meaning for Staff",
         draft.staff_meaning,
+    ]
+    if language_name.strip():
+        lines.extend(["", "🌐 Customer Language", language_name.strip()])
+    lines.extend([
         "",
         "💬 Reply /តបភ្ញៀវ",
         draft.customer_reply,
@@ -579,6 +604,7 @@ def format_stage2_card(
         "━━━━━━━━━━━━━━",
         "⚠️ Check before send",
     ])
+    return "\n".join(lines)
 
 
 def format_staff_translation_card(
@@ -969,11 +995,16 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             draft_customer_reply,
             question,
             staff_meaning=staff_meaning,
+            customer_language=str(stored.get("detected_language", "") or ""),
+            language_name=str(stored.get("language_name", "") or ""),
             knowledge=load_knowledge(),
         )
         stored["staff_meaning"] = draft.staff_meaning
         stored["customer_reply"] = draft.customer_reply
-        card = format_stage2_card(draft)
+        card = format_stage2_card(
+            draft,
+            language_name=str(stored.get("language_name", "") or ""),
+        )
         await send_stage2_reply(message=query.message, context=context, stored=stored, card=card)
         return
 
@@ -1034,13 +1065,19 @@ async def staff_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             draft_customer_reply,
             question,
             staff_meaning=staff_meaning,
+            customer_language=str(stored.get("detected_language", "") or ""),
+            language_name=str(stored.get("language_name", "") or ""),
             mode=mode,
             previous_reply=previous,
             knowledge=load_knowledge(),
         )
         stored["staff_meaning"] = draft.staff_meaning
         stored["customer_reply"] = draft.customer_reply
-        card = format_stage2_card(draft, mode_label=label)
+        card = format_stage2_card(
+            draft,
+            language_name=str(stored.get("language_name", "") or ""),
+            mode_label=label,
+        )
 
     await send_stage2_reply(
         message=query.message,
