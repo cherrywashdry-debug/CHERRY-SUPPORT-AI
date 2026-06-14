@@ -56,6 +56,22 @@ class TestGroupRouting(unittest.TestCase):
         self.assertFalse(staff.is_translate_chat(upd))
         self.assertTrue(app.is_faq_chat(upd))
 
+    def test_translate_group_by_title_without_env(self) -> None:
+        upd = SimpleNamespace(
+            effective_chat=SimpleNamespace(
+                id=-1009999999999,
+                type="supergroup",
+                title="TRANSLATE_AI_GROUP-1003860053672",
+            ),
+            effective_user=SimpleNamespace(id=999),
+        )
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.pop("TRANSLATE_AI_GROUP_ID", None)
+            os.environ.pop("STAFF_GROUP_ID", None)
+            os.environ.pop("ANSWER_GROUP_ID", None)
+            self.assertTrue(staff.is_translate_chat(upd))
+            self.assertFalse(app.is_faq_chat(upd))
+
     def test_random_group_is_not_faq_when_answer_group_set(self) -> None:
         upd = _update(-1001111111111)
         self.assertFalse(staff.is_translate_chat(upd))

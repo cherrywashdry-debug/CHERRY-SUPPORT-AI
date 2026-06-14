@@ -361,19 +361,29 @@ def load_knowledge() -> str:
     return ""
 
 
+def is_translate_group_title(title: str | None) -> bool:
+    """Fallback when env ID missing — group named TRANSLATE_AI_GROUP..."""
+    text = (title or "").upper()
+    return "TRANSLATE" in text and "GROUP" in text
+
+
 def is_translate_chat(update: Update) -> bool:
-    """Translation mode: TRANSLATE_AI_GROUP or allowed-user DM."""
+    """Translation mode: translate group env, translate group title, or allowed-user DM."""
     chat = update.effective_chat
     user = update.effective_user
     if not chat:
         return False
-    if is_setup_mode():
-        if chat.type in ("group", "supergroup"):
+
+    if chat.type in ("group", "supergroup"):
+        translate_gid = translate_ai_group_id()
+        if translate_gid is not None and chat.id == translate_gid:
             return True
-        return user is not None and user.id in allowed_user_ids()
-    translate_gid = translate_ai_group_id()
-    if translate_gid is not None and chat.id == translate_gid:
-        return True
+        if is_translate_group_title(getattr(chat, "title", None)):
+            return True
+        if is_setup_mode():
+            return True
+        return False
+
     return (
         user is not None
         and user.id in allowed_user_ids()

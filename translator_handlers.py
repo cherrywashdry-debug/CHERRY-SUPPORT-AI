@@ -6,7 +6,7 @@ import logging
 import os
 from typing import Any
 
-from telegram import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.ext import ContextTypes
 
 from staff_translate import is_translate_chat
@@ -132,8 +132,11 @@ async def send_main_menu(
     target = update.effective_message or (
         update.callback_query.message if update.callback_query else None
     )
-    if target:
-        await target.reply_text(prefix or WELCOME, reply_markup=main_menu_keyboard())
+    if not target:
+        return
+    # Remove stale FAQ reply keyboard from this chat
+    await target.reply_text("🌐", reply_markup=ReplyKeyboardRemove())
+    await target.reply_text(prefix or WELCOME, reply_markup=main_menu_keyboard())
 
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
