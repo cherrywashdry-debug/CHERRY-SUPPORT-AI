@@ -320,8 +320,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     if is_back_button(raw):
+        context.user_data.pop(STAFF_LANG_SET_KEY, None)
         context.user_data.pop(CUSTOMER_LANG_SET_KEY, None)
-        await send_customer_lang_menu_ctx(update, context)
+        await send_staff_lang_menu(update)
         return
 
     reply_key = parse_command(raw)
