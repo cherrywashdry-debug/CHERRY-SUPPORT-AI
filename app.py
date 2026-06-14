@@ -34,7 +34,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.support_ai")
 
-VERSION = "CHERRY SUPPORT AI - UNIFIED-FAQ-STAFF-V1"
+VERSION = "CHERRY SUPPORT AI - UNIFIED-FAQ-STAFF-V2"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -65,14 +65,18 @@ async def route_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def route_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if is_staff_chat(update):
+    """Show group ID in any Telegram group — for STAFF_GROUP_ID setup."""
+    chat = update.effective_chat
+    if chat and chat.type in ("group", "supergroup"):
         await staff.group_cmd(update, context)
         return
     message = update.effective_message
     if message:
         await message.reply_text(
-            "โหมด FAQ ค่ะ\n\n"
-            "สำหรับตั้งค่ากลุ่มแปล: ส่ง /group ในกลุ่ม staff ที่ตั้ง STAFF_GROUP_ID"
+            "เช็ค Group ID ได้ในกลุ่ม Telegram เท่านั้นค่ะ\n\n"
+            "1. Add บอทเข้ากลุ่มแปลใหม่\n"
+            "2. ส่ง /group ในกลุ่มนั้น\n"
+            "3. Copy STAFF_GROUP_ID ไปใส่ Render → redeploy"
         )
 
 
