@@ -17,9 +17,9 @@ services:
         value: https://cherry-support-ai.onrender.com/telegram
       - key: BOT_TOKEN
         sync: false
-      - key: STAFF_GROUP_ID
+      - key: TRANSLATE_AI_GROUP_ID
         sync: false
-      - key: SUPPORT_AI_GROUP_ID
+      - key: ANSWER_GROUP_ID
         sync: false
       - key: OPENAI_API_KEY
         sync: false

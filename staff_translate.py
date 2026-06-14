@@ -38,7 +38,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.staff_ai")
 
-VERSION = "CHERRY STAFF AI - TRANSLATOR-V4-MENU-BUTTONS-R2"
+VERSION = "CHERRY STAFF AI - TRANSLATOR-V5-FIVE-LANGUAGES"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 KNOWLEDGE_PATH = ROOT / "CHERRY_KNOWLEDGE.md"
@@ -52,14 +52,18 @@ STAFF_LANG_SET_KEY = "staff_lang_set"
 CUSTOMER_ASK_MODE_KEY = "customer_ask_mode"
 DEFAULT_STAFF_LANG = "km"
 STAFF_LANG_OPTIONS: dict[str, str] = {
-    "km": "Khmer",
     "th": "Thai",
+    "en": "English",
+    "km": "Khmer",
     "id": "Indonesian",
+    "zh": "Chinese",
 }
 STAFF_LANG_LABELS: dict[str, str] = {
-    "km": "🇰🇭 Khmer",
     "th": "🇹🇭 Thai",
+    "en": "🇬🇧 English",
+    "km": "🇰🇭 Khmer",
     "id": "🇮🇩 Indonesian",
+    "zh": "🇨🇳 Chinese",
 }
 # In-memory fallback between webhook requests (same process).
 _AWAITING_STAFF_REPLY: dict[str, dict[str, Any]] = {}
@@ -86,7 +90,7 @@ class StaffTranslationDraft:
 
 STAFF_REPLY_PROMPT = (
     "✍️ Staff Reply — type your answer for the customer.\n"
-    "Use Thai, Khmer, English, or Indonesian.\n"
+    "Use Thai, English, Khmer, Indonesian, or Chinese.\n"
     "AI translates only. It will not add new information."
 )
 
@@ -101,6 +105,7 @@ REPLY_CHECK_FOOTER = "⚠️ Please check carefully before sending."
 
 KHMER_SCRIPT_RE = re.compile(r"[\u1780-\u17FF]")
 THAI_SCRIPT_RE = re.compile(r"[\u0E00-\u0E7F]")
+CHINESE_SCRIPT_RE = re.compile(r"[\u4E00-\u9FFF\u3400-\u4DBF]")
 
 
 def looks_like_khmer(text: str) -> bool:
@@ -109,6 +114,10 @@ def looks_like_khmer(text: str) -> bool:
 
 def looks_like_thai(text: str) -> bool:
     return bool(THAI_SCRIPT_RE.search(str(text or "")))
+
+
+def looks_like_chinese(text: str) -> bool:
+    return bool(CHINESE_SCRIPT_RE.search(str(text or "")))
 
 
 def normalize_staff_lang(code: str) -> str:
@@ -163,8 +172,14 @@ def staff_meaning_ok(text: str, staff_lang: str) -> bool:
         return looks_like_khmer(cleaned)
     if lang == "th":
         return looks_like_thai(cleaned)
-    if lang == "id":
-        return not looks_like_khmer(cleaned) and not looks_like_thai(cleaned)
+    if lang == "zh":
+        return looks_like_chinese(cleaned)
+    if lang in ("id", "en"):
+        return (
+            not looks_like_khmer(cleaned)
+            and not looks_like_thai(cleaned)
+            and not looks_like_chinese(cleaned)
+        )
     return True
 
 
@@ -219,7 +234,12 @@ def case_is_staff_reply_wait(case: dict[str, Any], *, user_id: int) -> bool:
 
 def looks_like_staff_language(text: str) -> bool:
     raw = str(text or "")
-    return looks_like_khmer(raw) or looks_like_thai(raw)
+    return (
+        looks_like_khmer(raw)
+        or looks_like_thai(raw)
+        or looks_like_chinese(raw)
+        or bool(re.search(r"[A-Za-z]", raw))
+    )
 
 
 def parse_chat_id(raw: str) -> int | None:
@@ -245,25 +265,45 @@ def parse_allowed_user_ids(raw: str) -> frozenset[int]:
     return frozenset(ids)
 
 
+def _env_group_id(*keys: str) -> int | None:
+    for key in keys:
+        value = parse_chat_id(os.getenv(key, ""))
+        if value is not None:
+            return value
+    return None
+
+
+def translate_ai_group_id() -> int | None:
+    return _env_group_id("TRANSLATE_AI_GROUP_ID", "STAFF_GROUP_ID")
+
+
+def answer_group_id() -> int | None:
+    return _env_group_id("ANSWER_GROUP_ID", "SUPPORT_AI_GROUP_ID")
+
+
 def staff_group_id() -> int | None:
-    return parse_chat_id(os.getenv("STAFF_GROUP_ID", ""))
+    """Legacy alias."""
+    return translate_ai_group_id()
 
 
 def support_ai_group_id() -> int | None:
-    return parse_chat_id(os.getenv("SUPPORT_AI_GROUP_ID", ""))
+    """Legacy alias."""
+    return answer_group_id()
 
 
 def translation_group_ids() -> frozenset[int]:
-    ids: set[int] = set()
-    for value in (staff_group_id(), support_ai_group_id()):
-        if value is not None:
-            ids.add(value)
-    return frozenset(ids)
+    gid = translate_ai_group_id()
+    return frozenset({gid}) if gid is not None else frozenset()
+
+
+def answer_group_ids() -> frozenset[int]:
+    gid = answer_group_id()
+    return frozenset({gid}) if gid is not None else frozenset()
 
 
 def is_setup_mode() -> bool:
-    """True until at least one translation group ID is set on Render."""
-    return not translation_group_ids()
+    """True until TRANSLATE_AI_GROUP_ID is set on Render."""
+    return translate_ai_group_id() is None
 
 
 def allowed_user_ids() -> frozenset[int]:
@@ -321,7 +361,8 @@ def load_knowledge() -> str:
     return ""
 
 
-def is_staff_chat(update: Update) -> bool:
+def is_translate_chat(update: Update) -> bool:
+    """Translation mode: TRANSLATE_AI_GROUP or allowed-user DM."""
     chat = update.effective_chat
     user = update.effective_user
     if not chat:
@@ -330,13 +371,19 @@ def is_staff_chat(update: Update) -> bool:
         if chat.type in ("group", "supergroup"):
             return True
         return user is not None and user.id in allowed_user_ids()
-    if chat.id in translation_group_ids():
+    translate_gid = translate_ai_group_id()
+    if translate_gid is not None and chat.id == translate_gid:
         return True
     return (
         user is not None
         and user.id in allowed_user_ids()
         and chat.type == "private"
     )
+
+
+def is_staff_chat(update: Update) -> bool:
+    """Legacy alias — same as is_translate_chat."""
+    return is_translate_chat(update)
 
 
 def extract_customer_text(message: Any) -> str:
@@ -853,7 +900,7 @@ def stage2_keyboard(*, copy_text: str = "", show_send: bool = False) -> InlineKe
 
 USAGE_TEXT = (
     "CHERRY Staff AI — Google Translate mode\n\n"
-    "1) Choose YOUR language once (Khmer / Thai / Indonesian)\n"
+    "1) Choose YOUR language once (Thai / English / Khmer / Indonesian / Chinese)\n"
     "2) Paste customer message → bot explains in your language\n"
     "3) Reply to that message with your answer → bot translates for customer\n\n"
     "No button needed for normal use.\n"
@@ -863,7 +910,7 @@ USAGE_TEXT = (
 
 SETUP_HINT = (
     "CHERRY Staff AI is running (setup mode).\n\n"
-    "Send /group to get STAFF_GROUP_ID for Render.\n"
+    "Send /group to get TRANSLATE_AI_GROUP_ID for Render.\n"
     "After deploy, paste customer messages here for AI replies.\n\n"
     "BotFather: /setprivacy → Disable (so bot sees all messages in group)."
 )
@@ -878,6 +925,10 @@ def format_group_id_message(update: Update) -> str:
             f"Group / ក្រុម: {chat.title or '-'}",
             "",
             "Copy to Render → Environment (use the line for this group):",
+            f"TRANSLATE_AI_GROUP_ID={chat.id}",
+            f"ANSWER_GROUP_ID={chat.id}",
+            "",
+            "Legacy names also work:",
             f"STAFF_GROUP_ID={chat.id}",
             f"SUPPORT_AI_GROUP_ID={chat.id}",
             "",
@@ -896,20 +947,21 @@ def format_group_id_message(update: Update) -> str:
             f"Your user ID: {user.id}",
             f"(optional) ALLOWED_USER_IDS={user.id}",
         ])
-    configured = translation_group_ids()
-    if configured:
-        match = bool(chat and chat.id in configured)
-        staff_cfg = staff_group_id()
-        support_cfg = support_ai_group_id()
+    translate_cfg = translate_ai_group_id()
+    answer_cfg = answer_group_id()
+    if translate_cfg is not None or answer_cfg is not None:
+        match_translate = bool(chat and translate_cfg is not None and chat.id == translate_cfg)
+        match_answer = bool(chat and answer_cfg is not None and chat.id == answer_cfg)
         lines.extend([
             "",
-            f"STAFF_GROUP_ID on server: {staff_cfg if staff_cfg is not None else 'not set'}",
-            f"SUPPORT_AI_GROUP_ID on server: {support_cfg if support_cfg is not None else 'not set'}",
-            f"This chat matches: {'YES' if match else 'NO'}",
+            f"TRANSLATE_AI_GROUP_ID on server: {translate_cfg if translate_cfg is not None else 'not set'}",
+            f"ANSWER_GROUP_ID on server: {answer_cfg if answer_cfg is not None else 'not set'}",
+            f"This chat = translate group: {'YES' if match_translate else 'NO'}",
+            f"This chat = answer/FAQ group: {'YES' if match_answer else 'NO'}",
         ])
     else:
         lines.append("")
-        lines.append("Translation groups on server: not set yet")
+        lines.append("Group IDs on server: not set yet")
     return "\n".join(lines)
 
 
@@ -922,7 +974,7 @@ async def send_lang_picker(
     code, _ = get_staff_language(context)
     text = (
         "Choose YOUR language first:\n"
-        "Khmer / Thai / Indonesian"
+        "Thai / English / Khmer / Indonesian / Chinese"
         if first_time
         else f"Your language: {STAFF_LANG_OPTIONS[code]}\nChoose language for Meaning for Staff:"
     )
@@ -1443,7 +1495,11 @@ async def handle_staff_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     raw_text = message.text.strip()
     if raw_text.startswith("/"):
         return
-    if re.match(r"^(STAFF_GROUP_ID|SUPPORT_AI_GROUP_ID)\s*[-:=]?\s*-?\d", raw_text, re.I):
+    if re.match(
+        r"^(TRANSLATE_AI_GROUP_ID|ANSWER_GROUP_ID|STAFF_GROUP_ID|SUPPORT_AI_GROUP_ID)\s*[-:=]?\s*-?\d",
+        raw_text,
+        re.I,
+    ):
         return
 
     user = update.effective_user

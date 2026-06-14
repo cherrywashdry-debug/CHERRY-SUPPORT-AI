@@ -1,7 +1,7 @@
 """CHERRY SUPPORT AI — one bot, two modes by chat.
 
-Staff groups (`STAFF_GROUP_ID` and/or `SUPPORT_AI_GROUP_ID`): translation for staff.
-Everywhere else (private chat, other groups): FAQ menu.
+Translate group (`TRANSLATE_AI_GROUP_ID`): staff translation (OpenAI).
+Answer group (`ANSWER_GROUP_ID`), private chat, other groups: FAQ menu.
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from telegram.ext import (
 
 import faq_handlers as faq
 import staff_translate as staff
-from staff_translate import is_staff_chat
+from staff_translate import answer_group_id, is_translate_chat
 
 load_dotenv()
 
@@ -34,29 +34,42 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.support_ai")
 
-VERSION = "CHERRY SUPPORT AI - UNIFIED-FAQ-STAFF-V4-AUTO-TRANSLATE"
+VERSION = "CHERRY SUPPORT AI - UNIFIED-FAQ-STAFF-V5-FIVE-LANGUAGES"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
 
+def is_faq_chat(update: Update) -> bool:
+    """FAQ mode: answer group, private (non-translate DM), or other groups."""
+    if is_translate_chat(update):
+        return False
+    chat = update.effective_chat
+    if not chat:
+        return False
+    answer_gid = answer_group_id()
+    if answer_gid is not None and chat.type in ("group", "supergroup"):
+        return chat.id == answer_gid
+    return True
+
+
 async def route_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if is_staff_chat(update):
+    if is_translate_chat(update):
         await staff.start_cmd(update, context)
-    else:
+    elif is_faq_chat(update):
         await faq.start_cmd(update, context)
 
 
 async def route_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if is_staff_chat(update):
+    if is_translate_chat(update):
         await staff.menu_cmd(update, context)
-    else:
+    elif is_faq_chat(update):
         await faq.menu_cmd(update, context)
 
 
 async def route_lang(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if is_staff_chat(update):
+    if is_translate_chat(update):
         await staff.lang_cmd(update, context)
-    else:
+    elif is_faq_chat(update):
         await faq.language_cmd(update, context)
 
 
@@ -65,7 +78,7 @@ async def route_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def route_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show group ID in any Telegram group — for STAFF_GROUP_ID setup."""
+    """Show group ID in any Telegram group — for Render env setup."""
     chat = update.effective_chat
     if chat and chat.type in ("group", "supergroup"):
         await staff.group_cmd(update, context)
@@ -74,28 +87,28 @@ async def route_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if message:
         await message.reply_text(
             "เช็ค Group ID ได้ในกลุ่ม Telegram เท่านั้นค่ะ\n\n"
-            "1. Add บอทเข้ากลุ่มแปลใหม่\n"
+            "1. Add บอทเข้ากลุ่ม\n"
             "2. ส่ง /group ในกลุ่มนั้น\n"
-            "3. Copy STAFF_GROUP_ID ไปใส่ Render → redeploy"
+            "3. Copy TRANSLATE_AI_GROUP_ID หรือ ANSWER_GROUP_ID ไปใส่ Render → Manual Deploy"
         )
 
 
 async def route_health(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if is_staff_chat(update):
+    if is_translate_chat(update):
         await staff.health_cmd(update, context)
-    else:
+    elif is_faq_chat(update):
         await faq.health_cmd(update, context)
 
 
 async def route_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if is_staff_chat(update):
+    if is_translate_chat(update):
         await staff.handle_staff_text(update, context)
-    else:
+    elif is_faq_chat(update):
         await faq.handle_text(update, context)
 
 
 async def route_staff_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_staff_chat(update):
+    if not is_translate_chat(update):
         query = update.callback_query
         if query:
             await query.answer()
