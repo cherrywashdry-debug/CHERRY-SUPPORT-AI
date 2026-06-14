@@ -248,7 +248,7 @@ async def send_questions_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
     set_active_screen(context, SCREEN_QUESTIONS)
     staff = get_staff_lang(context)
     await message.reply_text(
-        "❓ Questions To Customer",
+        BTN_MENU_QUESTIONS,
         reply_markup=keyboard(question_menu_rows(staff)),
     )
 
@@ -260,7 +260,7 @@ async def send_replies_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     set_active_screen(context, SCREEN_REPLIES)
     staff = get_staff_lang(context)
     await message.reply_text(
-        "💬 Replies To Customer",
+        BTN_MENU_REPLIES,
         reply_markup=keyboard(reply_menu_rows(staff)),
     )
 

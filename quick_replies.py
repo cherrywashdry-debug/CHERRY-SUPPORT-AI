@@ -8,9 +8,14 @@ DEFAULT_CUSTOMER_LANG = "en"
 
 BTN_BACK = "Back/ត្រលប់់"
 
+# Unicode emoji (avoid plain "?" display issues on some clients)
+EMOJI_QUESTION = "\U00002753"  # ❓
+EMOJI_CROSS = "\U0000274C"  # ❌
+EMOJI_WARN = "\U000026A0\U0000FE0F"  # ⚠️
+
 # ── Main menu (same labels for all staff) ─────────────────────────────────────
-BTN_MENU_QUESTIONS = "❓ Questions To Customer"
-BTN_MENU_REPLIES = "💬 Replies To Customer"
+BTN_MENU_QUESTIONS = f"{EMOJI_QUESTION} Questions To Customer"
+BTN_MENU_REPLIES = "\U0001F4AC Replies To Customer"  # 💬
 BTN_MENU_CHANGE_CUSTOMER = "🌐 Change Customer Language"
 BTN_MENU_CHANGE_STAFF = "👩‍💼 Change Staff Language"
 BTN_MENU_CLEAR = "🧹 Clear Session"
@@ -50,66 +55,38 @@ QUESTION_KEY_ORDER: list[str] = [
     "q_confirm_wash",
 ]
 
-QUESTION_BUTTONS: dict[str, dict[str, str]] = {
-    "km": {
-        "q_separate_wash": "❓ /បោករួមរឺបោកផ្សេង",
-        "q_location": "❓ /ទីតាំង",
-        "q_house_photo": "❓ /សូមផ្ញើរូបផ្ទះ",
-        "q_send_location": "❓ /សូមផ្ញើទីតាំង",
-        "q_delivery_time": "❓ /ឲ្យបុគ្គលិកដឹកអោយម៉ោងប៉ុន្មាន",
-        "q_pickup_time": "❓ /ឱ្យបុគ្គលិកទៅយកម៉ោងប៉ុន្មាន",
-        "q_payment": "❓ /បង់ប្រាក់",
-        "q_bag_photo": "❓ /សូមផ្ញើរូបកាបូប",
-        "q_confirm_wash": "❓ /បញ្ជាក់ការបោក",
-    },
-    "th": {
-        "q_separate_wash": "❓ /ซักรวมไหม",
-        "q_location": "❓ /โลเคชั่น",
-        "q_house_photo": "❓ /ส่งรูปบ้าน",
-        "q_send_location": "❓ /ส่งโลเคชั่น",
-        "q_delivery_time": "❓ /ส่งกี่โมง",
-        "q_pickup_time": "❓ /รับกี่โมง",
-        "q_payment": "❓ /ชำระเงิน",
-        "q_bag_photo": "❓ /ส่งรูปถุงผ้า",
-        "q_confirm_wash": "❓ /ยืนยันการซัก",
-    },
-    "id": {
-        "q_separate_wash": "❓ /campuratauterpisah",
-        "q_location": "❓ /lokasi",
-        "q_house_photo": "❓ /fotorumah",
-        "q_send_location": "❓ /kirimlokasi",
-        "q_delivery_time": "❓ /antarjamberapa",
-        "q_pickup_time": "❓ /jemputjamberapa",
-        "q_payment": "❓ /pembayaran",
-        "q_bag_photo": "❓ /fototas",
-        "q_confirm_wash": "❓ /konfirmasicuci",
-    },
+# ── Approved staff buttons (same Khmer labels for all staff languages) ────────
+APPROVED_QUESTION_BUTTONS: dict[str, str] = {
+    "q_separate_wash": f"{EMOJI_QUESTION} /បោករួមរឺបោកផ្សេង",
+    "q_location": f"{EMOJI_QUESTION} /ទីតាំង",
+    "q_house_photo": f"{EMOJI_QUESTION} /សូមផ្ញើរូបផ្ទះ",
+    "q_send_location": f"{EMOJI_QUESTION} /សូមផ្ញើទីតាំង",
+    "q_delivery_time": f"{EMOJI_QUESTION} /ឲ្យបុគ្គលិកដឹកអោយម៉ោងប៉ុន្មាន",
+    "q_pickup_time": f"{EMOJI_QUESTION} /ឱ្យបុគ្គលិកទៅយកម៉ោងប៉ុន្មាន",
+    "q_payment": f"{EMOJI_QUESTION} /បង់ប្រាក់",
+    "q_bag_photo": f"{EMOJI_QUESTION} /សូមផ្ញើរូបកាបូប",
+    "q_confirm_wash": f"{EMOJI_QUESTION} /បញ្ជាក់ការបោក",
 }
 
-# ── Menu 2: Replies to customer (staff buttons) ───────────────────────────────
+APPROVED_REPLY_BUTTONS: dict[str, str] = {
+    "ironing": f"{EMOJI_CROSS} /មិនមានអ៊ុត",
+    "no_shoes": f"{EMOJI_CROSS} /មិនមានស្បែកជើង",
+    "before_service": f"{EMOJI_WARN} /មុនប្រើសេវា",
+}
+
+# Same approved labels regardless of staff language (km/th/id)
+QUESTION_BUTTONS: dict[str, dict[str, str]] = {
+    lang: dict(APPROVED_QUESTION_BUTTONS) for lang in STAFF_LANGS
+}
+REPLY_BUTTONS: dict[str, dict[str, str]] = {
+    lang: dict(APPROVED_REPLY_BUTTONS) for lang in STAFF_LANGS
+}
+
 REPLY_KEY_ORDER: list[str] = [
     "ironing",
     "no_shoes",
     "before_service",
 ]
-
-REPLY_BUTTONS: dict[str, dict[str, str]] = {
-    "km": {
-        "ironing": "❌ /មិនមានអ៊ុត",
-        "no_shoes": "❌ /មិនមានស្បែកជើង",
-        "before_service": "⚠️ /មុនប្រើសេវា",
-    },
-    "th": {
-        "ironing": "❌ /ไม่มีรีดผ้า",
-        "no_shoes": "❌ /ไม่มีซักรองเท้า",
-        "before_service": "⚠️ /ก่อนใช้บริการ",
-    },
-    "id": {
-        "ironing": "❌ /tidaksetrika",
-        "no_shoes": "❌ /tidakcucisepatu",
-        "before_service": "⚠️ /sebelumlayanan",
-    },
-}
 
 # ── Question texts for customer (Thai first; others TODO) ─────────────────────
 QUESTIONS: dict[str, dict[str, str]] = {
@@ -406,15 +383,13 @@ def _register_command(cmd_map: dict[str, str], label: str, key: str) -> None:
         cmd_map[token] = key
 
 
-for _lang, buttons in QUESTION_BUTTONS.items():
-    for key, label in buttons.items():
-        _register_command(LABEL_TO_QUESTION_KEY, label, key)
-        _register_command(COMMAND_TO_QUESTION_KEY, label, key)
+for key, label in APPROVED_QUESTION_BUTTONS.items():
+    _register_command(LABEL_TO_QUESTION_KEY, label, key)
+    _register_command(COMMAND_TO_QUESTION_KEY, label, key)
 
-for _lang, buttons in REPLY_BUTTONS.items():
-    for key, label in buttons.items():
-        _register_command(LABEL_TO_REPLY_KEY, label, key)
-        _register_command(COMMAND_TO_REPLY_KEY, label, key)
+for key, label in APPROVED_REPLY_BUTTONS.items():
+    _register_command(LABEL_TO_REPLY_KEY, label, key)
+    _register_command(COMMAND_TO_REPLY_KEY, label, key)
 
 
 def normalize_staff_lang(code: str) -> str:
@@ -457,10 +432,8 @@ def is_main_menu_label(text: str) -> bool:
     }
 
 
-def _rows_from_labels(labels: list[str]) -> list[list[str]]:
-    rows: list[list[str]] = []
-    for i in range(0, len(labels), 2):
-        rows.append(labels[i : i + 2])
+def _rows_one_per_label(labels: list[str]) -> list[list[str]]:
+    rows = [[label] for label in labels]
     rows.append([BTN_BACK])
     return rows
 
@@ -470,15 +443,13 @@ def main_menu_rows() -> list[list[str]]:
 
 
 def question_menu_rows(staff_lang: str) -> list[list[str]]:
-    lang = normalize_staff_lang(staff_lang)
-    labels = [QUESTION_BUTTONS[lang][key] for key in QUESTION_KEY_ORDER]
-    return _rows_from_labels(labels)
+    labels = [APPROVED_QUESTION_BUTTONS[key] for key in QUESTION_KEY_ORDER]
+    return _rows_one_per_label(labels)
 
 
 def reply_menu_rows(staff_lang: str) -> list[list[str]]:
-    lang = normalize_staff_lang(staff_lang)
-    labels = [REPLY_BUTTONS[lang][key] for key in REPLY_KEY_ORDER]
-    return _rows_from_labels(labels)
+    labels = [APPROVED_REPLY_BUTTONS[key] for key in REPLY_KEY_ORDER]
+    return _rows_one_per_label(labels)
 
 
 def parse_question_label(text: str) -> str | None:
