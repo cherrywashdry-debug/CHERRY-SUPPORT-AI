@@ -852,11 +852,11 @@ def stage2_keyboard(*, copy_text: str = "", show_send: bool = False) -> InlineKe
 
 
 USAGE_TEXT = (
-    "CHERRY Staff AI — Google Translate for staff\n\n"
-    "Step 1: Choose YOUR language (Khmer / Thai / Indonesian)\n"
-    "Step 2: Press 📩 Customer Asked → paste customer message\n"
-    "Step 3: Press ✍️ Staff Reply → type your answer\n"
-    "Step 4: Check meaning + customer reply → Copy or Send\n\n"
+    "CHERRY Staff AI — Google Translate mode\n\n"
+    "1) Choose YOUR language once (Khmer / Thai / Indonesian)\n"
+    "2) Paste customer message → bot explains in your language\n"
+    "3) Reply to that message with your answer → bot translates for customer\n\n"
+    "No button needed for normal use.\n"
     "Commands: /menu /lang /health\n"
     "AI only translates. Simple words. No invented answers."
 )
@@ -1213,6 +1213,18 @@ def resolve_pending_staff_case(
     if gate_case:
         return gate_case
 
+    if reply_to and reply_to.from_user and reply_to.from_user.is_bot:
+        case = get_active_case(context, chat.id)
+        if isinstance(case, dict):
+            stage1_id = case.get("stage1_message_id")
+            if stage1_id and reply_to.message_id == stage1_id:
+                logger.info(
+                    "staff reply matched stage1 user=%s support_id=%s",
+                    user.id,
+                    case.get("support_id"),
+                )
+                return dict(case)
+
     return None
 
 
@@ -1419,7 +1431,7 @@ async def process_customer_ask_input(
 
 
 async def handle_staff_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Only process text after staff pressed 📩 Customer Asked or ✍️ Staff Reply."""
+    """Google Translate style: paste customer text, or reply to bot with staff answer."""
     if not is_staff_chat(update):
         return
     message = update.effective_message
@@ -1430,6 +1442,8 @@ async def handle_staff_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     raw_text = message.text.strip()
     if raw_text.startswith("/"):
+        return
+    if re.match(r"^(STAFF_GROUP_ID|SUPPORT_AI_GROUP_ID)\s*[-:=]?\s*-?\d", raw_text, re.I):
         return
 
     user = update.effective_user
@@ -1462,6 +1476,7 @@ async def handle_staff_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if is_setup_mode():
             await message.reply_text(SETUP_HINT)
             return
+        clear_customer_ask_mode(context)
         await process_customer_ask_input(
             update,
             context,
@@ -1471,10 +1486,19 @@ async def handle_staff_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         return
 
-    code, name = get_staff_language(context)
-    await message.reply_text(
-        f"Press a button first.\nYour language: {name}\n{MENU_HINT}",
-        reply_markup=main_menu_keyboard(staff_lang_code=code),
+    if is_setup_mode():
+        await message.reply_text(SETUP_HINT)
+        return
+
+    text, telegram_id, order_id = extract_message_context(message)
+    if not text:
+        return
+    await process_customer_ask_input(
+        update,
+        context,
+        text=text,
+        telegram_id=telegram_id,
+        order_id=order_id,
     )
 
 

@@ -34,7 +34,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.support_ai")
 
-VERSION = "CHERRY SUPPORT AI - UNIFIED-FAQ-STAFF-V3"
+VERSION = "CHERRY SUPPORT AI - UNIFIED-FAQ-STAFF-V4-AUTO-TRANSLATE"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
