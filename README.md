@@ -1,67 +1,48 @@
-# CHERRY SUPPORT AI — Unified Bot
+# CHERRY Quick Reply Bot
 
-บอท Telegram **ตัวเดียว** บน service **cherry-support-ai** — แยกโหมดตามกลุ่ม
+Staff-only Telegram bot for **fixed approved customer replies**. Deploys to Render as `cherry-support-ai`.
 
-**Production:** https://cherry-support-ai.onrender.com
+**Not** a translator, AI chat, customer FAQ, or CHERRY BOT V3.
 
-## โหมดการทำงาน
+## Flow
 
-| แชท | Env | โหมด |
-|-----|-----|------|
-| **กลุ่มแปล** | `TRANSLATE_AI_GROUP_ID` | เลือกภาษา → ส่งข้อความ → **แปลอย่างเดียว** |
-| **กลุ่ม FAQ** | `ANSWER_GROUP_ID` | เมนูคำตอบสำเร็จรูป |
-| **แชทส่วนตัว** | — | FAQ |
-| **DM ทดสอบแปล** | `ALLOWED_USER_IDS` | แปล (optional) |
+1. Staff chooses staff language (Khmer / Thai / Indonesian)
+2. Staff chooses customer reply language (Thai / English / Khmer / Indonesian / Chinese)
+3. Staff sees quick-reply buttons in their language
+4. Press a button → bot sends the fixed reply in the customer language
 
-**BOT_TOKEN ตัวเดียว** — ไม่ต้องแยก service
+## Commands
 
-## Environment (Render)
+| Command | Action |
+|---------|--------|
+| `/start` | Choose staff language |
+| `/language` | Change staff language |
+| `/customer` | Change customer language |
+| `/menu` | Quick reply menu |
+| `/clear` | Reset session |
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `BOT_TOKEN` | Yes | Token บอท CHERRY SUPPORT AI |
-| `TRANSLATE_AI_GROUP_ID` | Yes | กลุ่มแปลภาษา |
-| `ANSWER_GROUP_ID` | Yes | กลุ่ม FAQ |
-| `OPENAI_API_KEY` | Yes | สำหรับโหมดแปล |
-| `WEBHOOK_URL` | Yes | `https://cherry-support-ai.onrender.com/telegram` |
-| `TZ` | Yes | `Asia/Phnom_Penh` |
-| `ALLOWED_USER_IDS` | Optional | ทดสอบแปลใน DM |
+## Edit replies
 
-ชื่อเก่ายังใช้ได้: `STAFF_GROUP_ID` → translate, `SUPPORT_AI_GROUP_ID` → answer
+All approved text lives in **`quick_replies.py`** only. Each reply key has 5 languages: `TH`, `EN`, `KH`, `ID`, `CN`.
 
-## คำสั่ง
+## Render env
 
-| Command | FAQ | Translate group |
-|---------|-----|-----------------|
-| `/start` | เมนู FAQ | เมนูแปล |
-| `/menu` | เมนู FAQ | เมนูแปล |
-| `/language` | เปลี่ยนภาษา FAQ | — |
-| `/lang` | เปลี่ยนภาษา FAQ | เปลี่ยนภาษาพนักงาน |
-| `/group` | คำแนะนำ | แสดง group ID |
-| `/health` | OK | OK + OpenAI |
+| Key | Required |
+|-----|----------|
+| `BOT_TOKEN` | Yes |
+| `ALLOWED_USER_IDS` | Yes (comma-separated Telegram user IDs) |
+| `WEBHOOK_URL` | Yes |
+| `TZ` | Optional (`Asia/Phnom_Penh`) |
 
-## วิธีใช้ในกลุ่มแปล
+No OpenAI keys needed.
 
-1. `/start` หรือ `/menu` → เลือก **Translate To Thai / English / Khmer / Indonesian / Chinese**
-2. ส่งข้อความที่ต้องการแปล
-3. ได้คำแปล + ปุ่ม Copy (หรือเลือก **All 5 Languages**)
-
-**แปลอย่างเดียว — ไม่ตอบคำถาม ไม่ถามกลับ**
-
-## Setup
-
-1. Add บอทเข้า **กลุ่มแปล** และ **กลุ่ม FAQ** (คนละกลุ่ม)
-2. ส่ง `/group` ในแต่ละกลุ่ม → copy ID ไป Render
-3. BotFather `/setprivacy` → **Disable** (กลุ่มแปล)
-
-## Tests
+## Local test
 
 ```bash
-python -m unittest discover -s tests -v
+pip install -r requirements.txt
+python -m tests.test_quick_reply_bot
 ```
 
 ## Deploy
 
-Push แล้ว **Manual Deploy** บน Render — ตรวจ `/health` ว่าเป็น `V5-GROUP-SPLIT`
-
-**Not CHERRY BOT V3** — ไม่เชื่อม Google Sheet / ออเดอร์ / บิล
+Push `_support_ai_deploy` to its Render repo and **Manual Deploy**. Remove unused `OPENAI_API_KEY` / `OPENAI_MODEL` from Render if still set.

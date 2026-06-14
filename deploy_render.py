@@ -26,9 +26,8 @@ WEBHOOK_URL = os.getenv(
     "WEBHOOK_URL",
     "https://cherry-support-ai.onrender.com/telegram",
 ).strip()
-TRANSLATE_GROUP_ID = os.getenv("TRANSLATE_AI_GROUP_ID", "-1003860053672").strip()
 ALLOWED_USER_IDS = os.getenv("ALLOWED_USER_IDS", "1087968824").strip()
-EXPECTED_HEALTH = "V6.2-GROUP-MODE-FIX"
+EXPECTED_HEALTH = "FIXED-V1"
 HEALTH_URL = "https://cherry-support-ai.onrender.com/health"
 
 
@@ -111,17 +110,11 @@ def ensure_env_vars(service_id: str) -> None:
     desired = {
         "WEBHOOK_URL": WEBHOOK_URL,
         "TZ": "Asia/Phnom_Penh",
-        "OPENAI_MODEL": "gpt-4o-mini",
-        "STAFF_GROUP_ID": TRANSLATE_GROUP_ID,
-        "TRANSLATE_AI_GROUP_ID": TRANSLATE_GROUP_ID,
         "ALLOWED_USER_IDS": ALLOWED_USER_IDS,
     }
     bot = os.getenv("BOT_TOKEN", "").strip()
     if bot:
         desired["BOT_TOKEN"] = bot
-    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if openai_key:
-        desired["OPENAI_API_KEY"] = openai_key
 
     existing = list_env_vars(service_id)
     for key, value in desired.items():
@@ -216,7 +209,7 @@ def main() -> int:
 
     health = wait_health()
     print(f"OK — live health: {health}")
-    print("Telegram: /start in TRANSLATE_AI_GROUP -> 5 language buttons")
+    print("Telegram: /start -> staff language -> customer language -> quick reply buttons")
     return 0
 
 

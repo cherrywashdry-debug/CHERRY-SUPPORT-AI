@@ -1,7 +1,8 @@
-"""CHERRY SUPPORT AI — one bot, two modes by chat.
+"""CHERRY QUICK REPLY BOT — fixed staff quick replies only.
 
-Translate group: pure translator (pick language → send text → translation).
-Answer group / private: FAQ menu.
+Not a translator. Not AI chat. Not customer FAQ. Not CHERRY BOT V3.
+Staff picks their language, picks customer language, presses a button,
+bot sends a fixed approved reply in the customer language.
 """
 from __future__ import annotations
 
@@ -11,10 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.ext import (
     Application,
-    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -22,10 +22,19 @@ from telegram.ext import (
     filters,
 )
 
-import faq_handlers as faq
-import staff_translate as staff
-import translator_handlers as translator
-from staff_translate import answer_group_id, is_translate_chat
+from quick_replies import (
+    CUSTOMER_LANG_LABELS,
+    DEFAULT_CUSTOMER_LANG,
+    DEFAULT_STAFF_LANG,
+    STAFF_LANG_LABELS,
+    customer_lang_from_label,
+    menu_rows,
+    normalize_customer_lang,
+    normalize_staff_lang,
+    parse_command,
+    quick_reply_text,
+    staff_lang_from_label,
+)
 
 load_dotenv()
 
@@ -33,88 +42,304 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
     level=logging.INFO,
 )
-logger = logging.getLogger("cherry.support_ai")
+logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY SUPPORT AI - UNIFIED-V6.2-GROUP-MODE-FIX"
+VERSION = "CHERRY QUICK REPLY - FIXED-V1"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
+STAFF_LANG_KEY = "staff_lang"
+CUSTOMER_LANG_KEY = "customer_lang"
+STAFF_LANG_SET_KEY = "staff_lang_set"
+CUSTOMER_LANG_SET_KEY = "customer_lang_set"
 
-def is_faq_chat(update: Update) -> bool:
-    """FAQ only in ANSWER group or private chat — never other groups."""
-    if is_translate_chat(update):
+
+def parse_allowed_user_ids(raw: str) -> frozenset[int]:
+    ids: set[int] = set()
+    for part in str(raw or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            ids.add(int(part))
+        except ValueError:
+            continue
+    return frozenset(ids)
+
+
+def allowed_user_ids() -> frozenset[int]:
+    return parse_allowed_user_ids(os.getenv("ALLOWED_USER_IDS", ""))
+
+
+def is_staff_user(update: Update) -> bool:
+    user = update.effective_user
+    allowed = allowed_user_ids()
+    if not allowed:
+        return user is not None
+    return user is not None and user.id in allowed
+
+
+def get_staff_lang(context: ContextTypes.DEFAULT_TYPE) -> str:
+    return normalize_staff_lang(str(context.user_data.get(STAFF_LANG_KEY, DEFAULT_STAFF_LANG)))
+
+
+def get_customer_lang(context: ContextTypes.DEFAULT_TYPE) -> str:
+    return normalize_customer_lang(
+        str(context.user_data.get(CUSTOMER_LANG_KEY, DEFAULT_CUSTOMER_LANG))
+    )
+
+
+def staff_lang_is_set(context: ContextTypes.DEFAULT_TYPE) -> bool:
+    return bool(context.user_data.get(STAFF_LANG_SET_KEY))
+
+
+def customer_lang_is_set(context: ContextTypes.DEFAULT_TYPE) -> bool:
+    return bool(context.user_data.get(CUSTOMER_LANG_SET_KEY))
+
+
+def set_staff_lang(context: ContextTypes.DEFAULT_TYPE, code: str) -> str:
+    normalized = normalize_staff_lang(code)
+    context.user_data[STAFF_LANG_KEY] = normalized
+    context.user_data[STAFF_LANG_SET_KEY] = True
+    return normalized
+
+
+def set_customer_lang(context: ContextTypes.DEFAULT_TYPE, code: str) -> str:
+    normalized = normalize_customer_lang(code)
+    context.user_data[CUSTOMER_LANG_KEY] = normalized
+    context.user_data[CUSTOMER_LANG_SET_KEY] = True
+    return normalized
+
+
+def clear_session(context: ContextTypes.DEFAULT_TYPE) -> None:
+    for key in (
+        STAFF_LANG_KEY,
+        CUSTOMER_LANG_KEY,
+        STAFF_LANG_SET_KEY,
+        CUSTOMER_LANG_SET_KEY,
+    ):
+        context.user_data.pop(key, None)
+
+
+def keyboard(rows: list[list[str]], *, resize: bool = True) -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(rows, resize_keyboard=resize)
+
+
+def staff_lang_keyboard() -> ReplyKeyboardMarkup:
+    return keyboard([[STAFF_LANG_LABELS["km"]], [STAFF_LANG_LABELS["th"]], [STAFF_LANG_LABELS["id"]]])
+
+
+def customer_lang_keyboard() -> ReplyKeyboardMarkup:
+    return keyboard(
+        [
+            [CUSTOMER_LANG_LABELS["th"], CUSTOMER_LANG_LABELS["en"]],
+            [CUSTOMER_LANG_LABELS["km"], CUSTOMER_LANG_LABELS["id"]],
+            [CUSTOMER_LANG_LABELS["cn"]],
+        ]
+    )
+
+
+def quick_menu_keyboard(staff_lang: str) -> ReplyKeyboardMarkup:
+    return keyboard(menu_rows(staff_lang))
+
+
+def staff_lang_name(code: str) -> str:
+    return STAFF_LANG_LABELS.get(normalize_staff_lang(code), code)
+
+
+def customer_lang_name(code: str) -> str:
+    return CUSTOMER_LANG_LABELS.get(normalize_customer_lang(code), code)
+
+
+async def deny_if_not_staff(update: Update) -> bool:
+    if is_staff_user(update):
         return False
-    chat = update.effective_chat
-    if not chat:
-        return False
-    if chat.type in ("group", "supergroup"):
-        answer_gid = answer_group_id()
-        return answer_gid is not None and chat.id == answer_gid
+    message = update.effective_message
+    if message:
+        await message.reply_text("This bot is for CHERRY staff only.")
     return True
 
 
-async def route_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if is_translate_chat(update):
-        await translator.start_cmd(update, context)
-    elif is_faq_chat(update):
-        await faq.start_cmd(update, context)
-
-
-async def route_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if is_translate_chat(update):
-        await translator.menu_cmd(update, context)
-    elif is_faq_chat(update):
-        await faq.menu_cmd(update, context)
-
-
-async def route_lang(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if is_translate_chat(update):
-        await translator.lang_cmd(update, context)
-    elif is_faq_chat(update):
-        await faq.language_cmd(update, context)
-
-
-async def route_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await route_lang(update, context)
-
-
-async def route_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show group ID in any Telegram group — for Render env setup."""
-    chat = update.effective_chat
-    if chat and chat.type in ("group", "supergroup"):
-        await staff.group_cmd(update, context)
+async def send_staff_lang_menu(update: Update) -> None:
+    message = update.effective_message
+    if not message:
         return
+    await message.reply_text(
+        "🍒 CHERRY QUICK REPLY\n\nPlease choose staff language:",
+        reply_markup=staff_lang_keyboard(),
+    )
+
+
+async def send_customer_lang_menu_ctx(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    message = update.effective_message
+    if not message:
+        return
+    staff = get_staff_lang(context)
+    await message.reply_text(
+        f"Staff language: {staff_lang_name(staff)}\n\nPlease choose customer language:",
+        reply_markup=customer_lang_keyboard(),
+    )
+
+
+async def send_quick_menu(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    prefix: str | None = None,
+) -> None:
+    message = update.effective_message
+    if not message:
+        return
+    staff = get_staff_lang(context)
+    customer = get_customer_lang(context)
+    header = prefix or (
+        f"Staff: {staff_lang_name(staff)}\n"
+        f"Customer reply: {customer_lang_name(customer)}\n\n"
+        "Choose a quick reply:"
+    )
+    await message.reply_text(header, reply_markup=quick_menu_keyboard(staff))
+
+
+async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await deny_if_not_staff(update):
+        return
+    clear_session(context)
+    await send_staff_lang_menu(update)
+
+
+async def language_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await deny_if_not_staff(update):
+        return
+    context.user_data.pop(STAFF_LANG_SET_KEY, None)
+    context.user_data.pop(CUSTOMER_LANG_SET_KEY, None)
+    await send_staff_lang_menu(update)
+
+
+async def customer_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await deny_if_not_staff(update):
+        return
+    if not staff_lang_is_set(context):
+        await send_staff_lang_menu(update)
+        return
+    context.user_data.pop(CUSTOMER_LANG_SET_KEY, None)
+    await send_customer_lang_menu_ctx(update, context)
+
+
+async def menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await deny_if_not_staff(update):
+        return
+    if not staff_lang_is_set(context):
+        await send_staff_lang_menu(update)
+        return
+    if not customer_lang_is_set(context):
+        await send_customer_lang_menu_ctx(update, context)
+        return
+    await send_quick_menu(update, context)
+
+
+async def clear_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await deny_if_not_staff(update):
+        return
+    clear_session(context)
     message = update.effective_message
     if message:
         await message.reply_text(
-            "เช็ค Group ID ได้ในกลุ่ม Telegram เท่านั้นค่ะ\n\n"
-            "1. Add บอทเข้ากลุ่ม\n"
-            "2. ส่ง /group ในกลุ่มนั้น\n"
-            "3. Copy TRANSLATE_AI_GROUP_ID หรือ ANSWER_GROUP_ID ไปใส่ Render → Manual Deploy"
+            "Session cleared.",
+            reply_markup=ReplyKeyboardRemove(),
         )
+    await send_staff_lang_menu(update)
 
 
-async def route_health(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if is_translate_chat(update):
-        await translator.health_cmd(update, context)
-    elif is_faq_chat(update):
-        await faq.health_cmd(update, context)
-
-
-async def route_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if is_translate_chat(update):
-        await translator.handle_text(update, context)
-    elif is_faq_chat(update):
-        await faq.handle_text(update, context)
-
-
-async def route_translator_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_translate_chat(update):
-        query = update.callback_query
-        if query:
-            await query.answer()
+async def health_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await deny_if_not_staff(update):
         return
-    await translator.translator_callback(update, context)
+    message = update.effective_message
+    if message:
+        await message.reply_text(f"OK {VERSION}")
+
+
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await deny_if_not_staff(update):
+        return
+    message = update.effective_message
+    if not message or not message.text:
+        return
+
+    raw = message.text.strip()
+    if not raw:
+        return
+
+    # Staff language selection
+    picked_staff = staff_lang_from_label(raw)
+    if picked_staff and not staff_lang_is_set(context):
+        set_staff_lang(context, picked_staff)
+        await send_customer_lang_menu_ctx(update, context)
+        return
+
+    # Customer language selection
+    picked_customer = customer_lang_from_label(raw)
+    if picked_customer and staff_lang_is_set(context) and not customer_lang_is_set(context):
+        set_customer_lang(context, picked_customer)
+        await send_quick_menu(
+            update,
+            context,
+            prefix=(
+                f"Staff: {staff_lang_name(get_staff_lang(context))}\n"
+                f"Customer reply: {customer_lang_name(picked_customer)}\n\n"
+                "Ready. Choose a quick reply:"
+            ),
+        )
+        return
+
+    # Re-select staff language from label when already set (/language flow)
+    if picked_staff and staff_lang_is_set(context) and not customer_lang_is_set(context):
+        set_staff_lang(context, picked_staff)
+        await send_customer_lang_menu_ctx(update, context)
+        return
+
+    # Re-select customer language from label when already set (/customer flow)
+    if picked_customer and customer_lang_is_set(context):
+        set_customer_lang(context, picked_customer)
+        await send_quick_menu(
+            update,
+            context,
+            prefix=f"Customer reply set to {customer_lang_name(picked_customer)}.",
+        )
+        return
+
+    if not staff_lang_is_set(context):
+        await send_staff_lang_menu(update)
+        return
+
+    if not customer_lang_is_set(context):
+        await send_customer_lang_menu_ctx(update, context)
+        return
+
+    reply_key = parse_command(raw)
+    if not reply_key:
+        await send_quick_menu(
+            update,
+            context,
+            prefix="Please choose a button below:",
+        )
+        return
+
+    customer = get_customer_lang(context)
+    answer = quick_reply_text(reply_key, customer)
+    if not answer:
+        await message.reply_text(
+            "Reply not found. Contact admin.",
+            reply_markup=quick_menu_keyboard(get_staff_lang(context)),
+        )
+        return
+
+    await message.reply_text(
+        answer,
+        reply_markup=quick_menu_keyboard(get_staff_lang(context)),
+    )
 
 
 def build_health_response() -> str:
@@ -196,17 +421,15 @@ def build_app() -> Application:
         .concurrent_updates(True)
         .build()
     )
-    app.add_error_handler(staff.on_error)
-    app.add_handler(CommandHandler("start", route_start))
-    app.add_handler(CommandHandler("menu", route_menu))
-    app.add_handler(CommandHandler("lang", route_lang))
-    app.add_handler(CommandHandler("language", route_language))
-    app.add_handler(CommandHandler("group", route_group))
-    app.add_handler(CommandHandler("chatid", route_group))
-    app.add_handler(CommandHandler("id", route_group))
-    app.add_handler(CommandHandler("health", route_health))
-    app.add_handler(CallbackQueryHandler(route_translator_callback, pattern=r"^translator:"))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, route_text))
+    app.add_handler(CommandHandler("start", start_cmd))
+    app.add_handler(CommandHandler("language", language_cmd))
+    app.add_handler(CommandHandler("lang", language_cmd))
+    app.add_handler(CommandHandler("customer", customer_cmd))
+    app.add_handler(CommandHandler("menu", menu_cmd))
+    app.add_handler(CommandHandler("clear", clear_cmd))
+    app.add_handler(CommandHandler("health", health_cmd))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.COMMAND, handle_text))
     return app
 
 
