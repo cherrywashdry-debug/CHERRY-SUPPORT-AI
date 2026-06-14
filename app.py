@@ -28,6 +28,7 @@ from quick_replies import (
     DEFAULT_STAFF_LANG,
     STAFF_LANG_LABELS,
     customer_lang_from_label,
+    is_back_button,
     menu_rows,
     normalize_customer_lang,
     normalize_staff_lang,
@@ -315,6 +316,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     if not customer_lang_is_set(context):
+        await send_customer_lang_menu_ctx(update, context)
+        return
+
+    if is_back_button(raw):
+        context.user_data.pop(CUSTOMER_LANG_SET_KEY, None)
         await send_customer_lang_menu_ctx(update, context)
         return
 

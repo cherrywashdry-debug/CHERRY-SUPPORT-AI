@@ -6,6 +6,8 @@ CUSTOMER_LANGS = frozenset({"th", "en", "km", "id", "cn"})
 DEFAULT_STAFF_LANG = "km"
 DEFAULT_CUSTOMER_LANG = "en"
 
+BTN_BACK = "Back/ត្រលប់់"
+
 # ── Staff language picker ──────────────────────────────────────────────────────
 STAFF_LANG_LABELS: dict[str, str] = {
     "km": "🇰🇭 Khmer Staff",
@@ -463,7 +465,12 @@ def menu_rows(staff_lang: str) -> list[list[str]]:
     rows: list[list[str]] = []
     for i in range(0, len(labels), 2):
         rows.append(labels[i : i + 2])
+    rows.append([BTN_BACK])
     return rows
+
+
+def is_back_button(text: str) -> bool:
+    return str(text or "").strip() == BTN_BACK
 
 
 def parse_command(text: str) -> str | None:

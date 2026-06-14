@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from quick_replies import (
+    BTN_BACK,
     COMMAND_TO_KEY,
     QUICK_REPLIES,
     REPLY_KEY_ORDER,
@@ -68,7 +69,15 @@ def test_customer_language_labels() -> None:
 def test_menu_rows_count() -> None:
     rows = menu_rows("th")
     flat = [btn for row in rows for btn in row]
-    assert len(flat) == len(REPLY_KEY_ORDER)
+    assert len(flat) == len(REPLY_KEY_ORDER) + 1
+    assert flat[-1] == BTN_BACK
+
+
+def test_back_button_label() -> None:
+    from quick_replies import is_back_button
+
+    assert is_back_button("Back/ត្រលប់់")
+    assert not is_back_button("/ราคา")
 
 
 def test_command_lookup_case_insensitive_bot_suffix() -> None:
