@@ -73,3 +73,14 @@ git push origin main
 Render จะ deploy อัตโนมัติจาก repo นี้
 
 **Not CHERRY BOT V3** — ใช้ BOT_TOKEN แยก ไม่เชื่อม Google Sheet
+
+---
+
+## แยกจากบอทแปลภาษา (Staff AI)
+
+| บอท | Repo | Render | ใช้ที่ไหน |
+|-----|------|--------|-----------|
+| **FAQ (ตัวนี้)** | CHERRY-SUPPORT-AI | `cherry-support-ai` | แชทส่วนตัว — เมนู FAQ |
+| **Staff AI แปลภาษา** | CHERRY-STAFF-AI | `cherry-staff-ai` | กลุ่ม staff เท่านั้น |
+
+ห้ามใช้ BOT_TOKEN ร่วมกันระหว่างสองบอท
