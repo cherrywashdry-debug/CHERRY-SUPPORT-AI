@@ -28,7 +28,7 @@ WEBHOOK_URL = os.getenv(
 ).strip()
 TRANSLATE_GROUP_ID = os.getenv("TRANSLATE_AI_GROUP_ID", "-1003860053672").strip()
 ALLOWED_USER_IDS = os.getenv("ALLOWED_USER_IDS", "1087968824").strip()
-EXPECTED_HEALTH = "V6.1-TRANSLATE-FIX"
+EXPECTED_HEALTH = "V6.2-GROUP-MODE-FIX"
 HEALTH_URL = "https://cherry-support-ai.onrender.com/health"
 
 
@@ -216,7 +216,7 @@ def main() -> int:
 
     health = wait_health()
     print(f"OK — live health: {health}")
-    print("Telegram: /start in TRANSLATE_AI_GROUP → 5 language buttons")
+    print("Telegram: /start in TRANSLATE_AI_GROUP -> 5 language buttons")
     return 0
 
 

@@ -27,15 +27,45 @@ from translator_content import (
 
 logger = logging.getLogger("cherry.translator")
 
-VERSION = "CHERRY TRANSLATOR - V6-TRANSLATE-ONLY"
+VERSION = "CHERRY TRANSLATOR - V6.2-GROUP-MODE-FIX"
+
+# Webhook fallback — anonymous group posts use a different user_id than callback clicks.
+_CHAT_MODES: dict[int, str] = {}
 
 
-def get_mode(context: ContextTypes.DEFAULT_TYPE) -> str | None:
+def _is_group_chat(update: Update | None) -> bool:
+    chat = update.effective_chat if update else None
+    return bool(chat and chat.type in ("group", "supergroup"))
+
+
+def _chat_id(update: Update | None) -> int | None:
+    chat = update.effective_chat if update else None
+    return int(chat.id) if chat else None
+
+
+def get_mode(context: ContextTypes.DEFAULT_TYPE, update: Update | None = None) -> str | None:
+    cid = _chat_id(update)
+    if cid is not None and _is_group_chat(update):
+        mode = str(_CHAT_MODES.get(cid) or context.chat_data.get(SESSION_MODE_KEY, "") or "").strip()
+        return mode if mode else None
     mode = str(context.user_data.get(SESSION_MODE_KEY, "") or "").strip()
     return mode if mode else None
 
 
-def set_mode(context: ContextTypes.DEFAULT_TYPE, mode: str | None) -> None:
+def set_mode(
+    context: ContextTypes.DEFAULT_TYPE,
+    mode: str | None,
+    update: Update | None = None,
+) -> None:
+    cid = _chat_id(update)
+    if cid is not None and _is_group_chat(update):
+        if mode:
+            _CHAT_MODES[cid] = mode
+            context.chat_data[SESSION_MODE_KEY] = mode
+        else:
+            _CHAT_MODES.pop(cid, None)
+            context.chat_data.pop(SESSION_MODE_KEY, None)
+        return
     if mode:
         context.user_data[SESSION_MODE_KEY] = mode
     else:
@@ -134,7 +164,6 @@ async def send_main_menu(
     )
     if not target:
         return
-    # Remove stale FAQ reply keyboard from this chat
     await target.reply_text("🌐", reply_markup=ReplyKeyboardRemove())
     await target.reply_text(prefix or WELCOME, reply_markup=main_menu_keyboard())
 
@@ -142,7 +171,7 @@ async def send_main_menu(
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_translate_chat(update):
         return
-    set_mode(context, None)
+    set_mode(context, None, update)
     await send_main_menu(update, context)
 
 
@@ -153,7 +182,7 @@ async def menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def lang_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_translate_chat(update):
         return
-    set_mode(context, None)
+    set_mode(context, None, update)
     await send_main_menu(update, context, prefix="🌐 Choose translation language:")
 
 
@@ -161,7 +190,8 @@ async def health_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if not is_translate_chat(update) or not update.message:
         return
     ok = openai_client() is not None
-    await update.message.reply_text(f"{VERSION}\nOpenAI: {'OK' if ok else 'NO KEY'}")
+    mode = get_mode(context, update) or "not set"
+    await update.message.reply_text(f"{VERSION}\nOpenAI: {'OK' if ok else 'NO KEY'}\nMode: {mode}")
 
 
 async def translate_message(
@@ -213,7 +243,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if raw.startswith("/"):
         return
 
-    mode = get_mode(context)
+    mode = get_mode(context, update)
     if not mode:
         await message.reply_text(
             "Choose a language first 👇",
@@ -233,12 +263,12 @@ async def translator_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     data = query.data or ""
     if data == "translator:menu":
-        set_mode(context, None)
+        set_mode(context, None, update)
         await query.message.reply_text(WELCOME, reply_markup=main_menu_keyboard())
         return
 
     if data == "translator:another":
-        mode = get_mode(context)
+        mode = get_mode(context, update)
         if not mode:
             await query.message.reply_text(WELCOME, reply_markup=main_menu_keyboard())
             return
@@ -250,6 +280,6 @@ async def translator_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         picked = data.split(":", 2)[2]
         if picked not in SINGLE_LANG_ORDER and picked != MODE_ALL:
             return
-        set_mode(context, picked)
+        set_mode(context, picked, update)
         prompt = MODE_PROMPT if picked == MODE_ALL else single_mode_prompt(picked)
         await query.message.reply_text(prompt, reply_markup=after_translate_keyboard())
