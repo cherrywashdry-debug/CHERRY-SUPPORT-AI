@@ -6,26 +6,66 @@ CUSTOMER_LANGS = frozenset({"th", "en", "km", "id", "cn"})
 DEFAULT_STAFF_LANG = "km"
 DEFAULT_CUSTOMER_LANG = "en"
 
-BTN_BACK = "Back/ត្រលប់់"
+BTN_BACK = "Back/ត្រលប់់"  # legacy alias (km uses staff_ui back)
 
 # Unicode emoji (avoid plain "?" display issues on some clients)
 EMOJI_QUESTION = "\U00002753"  # ❓
 EMOJI_CROSS = "\U0000274C"  # ❌
 EMOJI_WARN = "\U000026A0\U0000FE0F"  # ⚠️
+EMOJI_CHAT = "\U0001F4AC"  # 💬
 
-# ── Main menu (same labels for all staff) ─────────────────────────────────────
-BTN_MENU_QUESTIONS = f"{EMOJI_QUESTION} Questions To Customer"
-BTN_MENU_REPLIES = "\U0001F4AC Replies To Customer"  # 💬
-BTN_MENU_CHANGE_CUSTOMER = "🌐 Change Customer Language"
-BTN_MENU_CHANGE_STAFF = "👩‍💼 Change Staff Language"
-BTN_MENU_CLEAR = "🧹 Clear Session"
+# ── Staff UI labels (main menu, back, prompts) ────────────────────────────────
+STAFF_UI: dict[str, dict[str, str]] = {
+    "km": {
+        "menu_questions": f"{EMOJI_QUESTION} សួរអតិថិជន",
+        "menu_replies": f"{EMOJI_CHAT} ឆ្លើយអតិថិជន",
+        "menu_change_customer": "🌐 ប្តូរភាសាអតិថិជន",
+        "menu_change_staff": "👩‍💼 ប្តូរភាសាបុគ្គលិក",
+        "menu_clear": "🧹 លុប Session",
+        "back": "ត្រឡប់",
+        "prompt_start": "🍒 CHERRY QUICK REPLY\n\nសូមជ្រើសរើសភាសាបុគ្គលិក:",
+        "prompt_customer": "ភាសាបុគ្គលិក: {staff}\n\nសូមជ្រើសរើសភាសាអតិថិជន:",
+        "prompt_main": "🍒 CHERRY QUICK REPLY\n\nសូមជ្រើសរើសម៉ឺនុយ:",
+        "header_questions": f"{EMOJI_QUESTION} សួរអតិថិជន",
+        "header_replies": f"{EMOJI_CHAT} ឆ្លើយអតិថិជន",
+        "session_cleared": "លុប Session រួចរាល់",
+    },
+    "th": {
+        "menu_questions": f"{EMOJI_QUESTION} ถามลูกค้า",
+        "menu_replies": f"{EMOJI_CHAT} ตอบลูกค้า",
+        "menu_change_customer": "🌐 เปลี่ยนภาษาลูกค้า",
+        "menu_change_staff": "👩‍💼 เปลี่ยนภาษาพนักงาน",
+        "menu_clear": "🧹 ล้าง Session",
+        "back": "กลับ",
+        "prompt_start": "🍒 CHERRY QUICK REPLY\n\nกรุณาเลือกภาษาพนักงาน:",
+        "prompt_customer": "ภาษาพนักงาน: {staff}\n\nกรุณาเลือกภาษาลูกค้า:",
+        "prompt_main": "🍒 CHERRY QUICK REPLY\n\nกรุณาเลือกเมนู:",
+        "header_questions": f"{EMOJI_QUESTION} ถามลูกค้า",
+        "header_replies": f"{EMOJI_CHAT} ตอบลูกค้า",
+        "session_cleared": "ล้าง Session แล้ว",
+    },
+    "id": {
+        "menu_questions": f"{EMOJI_QUESTION} Tanya Pelanggan",
+        "menu_replies": f"{EMOJI_CHAT} Balas Pelanggan",
+        "menu_change_customer": "🌐 Ganti Bahasa Pelanggan",
+        "menu_change_staff": "👩‍💼 Ganti Bahasa Staff",
+        "menu_clear": "🧹 Hapus Session",
+        "back": "Kembali",
+        "prompt_start": "🍒 CHERRY QUICK REPLY\n\nPilih bahasa staff:",
+        "prompt_customer": "Bahasa staff: {staff}\n\nPilih bahasa pelanggan:",
+        "prompt_main": "🍒 CHERRY QUICK REPLY\n\nPilih menu:",
+        "header_questions": f"{EMOJI_QUESTION} Tanya Pelanggan",
+        "header_replies": f"{EMOJI_CHAT} Balas Pelanggan",
+        "session_cleared": "Session dihapus",
+    },
+}
 
-MAIN_MENU_ROWS: list[list[str]] = [
-    [BTN_MENU_QUESTIONS],
-    [BTN_MENU_REPLIES],
-    [BTN_MENU_CHANGE_CUSTOMER, BTN_MENU_CHANGE_STAFF],
-    [BTN_MENU_CLEAR],
-]
+# Legacy constants (English — tests / fallback only)
+BTN_MENU_QUESTIONS = STAFF_UI["km"]["menu_questions"]
+BTN_MENU_REPLIES = STAFF_UI["km"]["menu_replies"]
+BTN_MENU_CHANGE_CUSTOMER = STAFF_UI["km"]["menu_change_customer"]
+BTN_MENU_CHANGE_STAFF = STAFF_UI["km"]["menu_change_staff"]
+BTN_MENU_CLEAR = STAFF_UI["km"]["menu_clear"]
 
 # ── Staff / customer language pickers ─────────────────────────────────────────
 STAFF_LANG_LABELS: dict[str, str] = {
@@ -74,12 +114,44 @@ APPROVED_REPLY_BUTTONS: dict[str, str] = {
     "before_service": f"{EMOJI_WARN} /មុនប្រើសេវា",
 }
 
-# Same approved labels regardless of staff language (km/th/id)
 QUESTION_BUTTONS: dict[str, dict[str, str]] = {
-    lang: dict(APPROVED_QUESTION_BUTTONS) for lang in STAFF_LANGS
+    "km": dict(APPROVED_QUESTION_BUTTONS),
+    "th": {
+        "q_separate_wash": f"{EMOJI_QUESTION} /ซักรวมไหม",
+        "q_location": f"{EMOJI_QUESTION} /โลเคชั่น",
+        "q_house_photo": f"{EMOJI_QUESTION} /ส่งรูปบ้าน",
+        "q_send_location": f"{EMOJI_QUESTION} /ส่งโลเคชั่น",
+        "q_delivery_time": f"{EMOJI_QUESTION} /ส่งกี่โมง",
+        "q_pickup_time": f"{EMOJI_QUESTION} /รับกี่โมง",
+        "q_payment": f"{EMOJI_QUESTION} /ชำระเงิน",
+        "q_bag_photo": f"{EMOJI_QUESTION} /ส่งรูปถุงผ้า",
+        "q_confirm_wash": f"{EMOJI_QUESTION} /ยืนยันการซัก",
+    },
+    "id": {
+        "q_separate_wash": f"{EMOJI_QUESTION} /campuratauterpisah",
+        "q_location": f"{EMOJI_QUESTION} /lokasi",
+        "q_house_photo": f"{EMOJI_QUESTION} /fotorumah",
+        "q_send_location": f"{EMOJI_QUESTION} /kirimlokasi",
+        "q_delivery_time": f"{EMOJI_QUESTION} /antarjamberapa",
+        "q_pickup_time": f"{EMOJI_QUESTION} /jemputjamberapa",
+        "q_payment": f"{EMOJI_QUESTION} /pembayaran",
+        "q_bag_photo": f"{EMOJI_QUESTION} /fototas",
+        "q_confirm_wash": f"{EMOJI_QUESTION} /konfirmasicuci",
+    },
 }
+
 REPLY_BUTTONS: dict[str, dict[str, str]] = {
-    lang: dict(APPROVED_REPLY_BUTTONS) for lang in STAFF_LANGS
+    "km": dict(APPROVED_REPLY_BUTTONS),
+    "th": {
+        "ironing": f"{EMOJI_CROSS} /ไม่มีรีดผ้า",
+        "no_shoes": f"{EMOJI_CROSS} /ไม่มีซักรองเท้า",
+        "before_service": f"{EMOJI_WARN} /ก่อนใช้บริการ",
+    },
+    "id": {
+        "ironing": f"{EMOJI_CROSS} /tidaksetrika",
+        "no_shoes": f"{EMOJI_CROSS} /tidakcucisepatu",
+        "before_service": f"{EMOJI_WARN} /sebelumlayanan",
+    },
 }
 
 REPLY_KEY_ORDER: list[str] = [
@@ -383,13 +455,48 @@ def _register_command(cmd_map: dict[str, str], label: str, key: str) -> None:
         cmd_map[token] = key
 
 
-for key, label in APPROVED_QUESTION_BUTTONS.items():
-    _register_command(LABEL_TO_QUESTION_KEY, label, key)
-    _register_command(COMMAND_TO_QUESTION_KEY, label, key)
+for _lang, buttons in QUESTION_BUTTONS.items():
+    for key, label in buttons.items():
+        _register_command(LABEL_TO_QUESTION_KEY, label, key)
+        _register_command(COMMAND_TO_QUESTION_KEY, label, key)
 
-for key, label in APPROVED_REPLY_BUTTONS.items():
-    _register_command(LABEL_TO_REPLY_KEY, label, key)
-    _register_command(COMMAND_TO_REPLY_KEY, label, key)
+for _lang, buttons in REPLY_BUTTONS.items():
+    for key, label in buttons.items():
+        _register_command(LABEL_TO_REPLY_KEY, label, key)
+        _register_command(COMMAND_TO_REPLY_KEY, label, key)
+
+
+def staff_ui(staff_lang: str, key: str) -> str:
+    lang = normalize_staff_lang(staff_lang)
+    return STAFF_UI[lang].get(key, STAFF_UI[DEFAULT_STAFF_LANG].get(key, ""))
+
+
+def back_button(staff_lang: str) -> str:
+    return staff_ui(staff_lang, "back")
+
+
+def main_menu_action(text: str) -> str | None:
+    raw = str(text or "").strip()
+    action_keys = (
+        "menu_questions",
+        "menu_replies",
+        "menu_change_customer",
+        "menu_change_staff",
+        "menu_clear",
+    )
+    action_map = {
+        "menu_questions": "questions",
+        "menu_replies": "replies",
+        "menu_change_customer": "change_customer",
+        "menu_change_staff": "change_staff",
+        "menu_clear": "clear",
+    }
+    for lang in STAFF_LANGS:
+        ui = STAFF_UI[lang]
+        for ui_key in action_keys:
+            if raw == ui[ui_key]:
+                return action_map[ui_key]
+    return None
 
 
 def normalize_staff_lang(code: str) -> str:
@@ -418,38 +525,44 @@ def customer_lang_from_label(label: str) -> str | None:
     return None
 
 
-def is_back_button(text: str) -> bool:
-    return str(text or "").strip() == BTN_BACK
+def is_back_button(text: str, staff_lang: str | None = None) -> bool:
+    raw = str(text or "").strip()
+    if staff_lang:
+        return raw == back_button(staff_lang)
+    return any(raw == STAFF_UI[lang]["back"] for lang in STAFF_LANGS)
 
 
 def is_main_menu_label(text: str) -> bool:
-    return str(text or "").strip() in {
-        BTN_MENU_QUESTIONS,
-        BTN_MENU_REPLIES,
-        BTN_MENU_CHANGE_CUSTOMER,
-        BTN_MENU_CHANGE_STAFF,
-        BTN_MENU_CLEAR,
-    }
+    return main_menu_action(text) is not None
 
 
-def _rows_one_per_label(labels: list[str]) -> list[list[str]]:
+def _rows_one_per_label(labels: list[str], staff_lang: str) -> list[list[str]]:
     rows = [[label] for label in labels]
-    rows.append([BTN_BACK])
+    rows.append([back_button(staff_lang)])
     return rows
 
 
-def main_menu_rows() -> list[list[str]]:
-    return MAIN_MENU_ROWS
+def main_menu_rows(staff_lang: str) -> list[list[str]]:
+    lang = normalize_staff_lang(staff_lang)
+    ui = STAFF_UI[lang]
+    return [
+        [ui["menu_questions"]],
+        [ui["menu_replies"]],
+        [ui["menu_change_customer"], ui["menu_change_staff"]],
+        [ui["menu_clear"]],
+    ]
 
 
 def question_menu_rows(staff_lang: str) -> list[list[str]]:
-    labels = [APPROVED_QUESTION_BUTTONS[key] for key in QUESTION_KEY_ORDER]
-    return _rows_one_per_label(labels)
+    lang = normalize_staff_lang(staff_lang)
+    labels = [QUESTION_BUTTONS[lang][key] for key in QUESTION_KEY_ORDER]
+    return _rows_one_per_label(labels, lang)
 
 
 def reply_menu_rows(staff_lang: str) -> list[list[str]]:
-    labels = [APPROVED_REPLY_BUTTONS[key] for key in REPLY_KEY_ORDER]
-    return _rows_one_per_label(labels)
+    lang = normalize_staff_lang(staff_lang)
+    labels = [REPLY_BUTTONS[lang][key] for key in REPLY_KEY_ORDER]
+    return _rows_one_per_label(labels, lang)
 
 
 def parse_question_label(text: str) -> str | None:

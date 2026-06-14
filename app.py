@@ -23,11 +23,6 @@ from telegram.ext import (
 )
 
 from quick_replies import (
-    BTN_MENU_CHANGE_CUSTOMER,
-    BTN_MENU_CHANGE_STAFF,
-    BTN_MENU_CLEAR,
-    BTN_MENU_QUESTIONS,
-    BTN_MENU_REPLIES,
     CUSTOMER_LANG_LABELS,
     DEFAULT_CUSTOMER_LANG,
     DEFAULT_STAFF_LANG,
@@ -35,6 +30,7 @@ from quick_replies import (
     customer_lang_from_label,
     is_back_button,
     is_main_menu_label,
+    main_menu_action,
     main_menu_rows,
     parse_question_label,
     parse_reply_label,
@@ -43,6 +39,7 @@ from quick_replies import (
     quick_reply_text,
     reply_menu_rows,
     staff_lang_from_label,
+    staff_ui,
 )
 
 load_dotenv()
@@ -53,7 +50,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - FIXED-V2"
+VERSION = "CHERRY QUICK REPLY - FIXED-V2.1"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -200,7 +197,7 @@ async def send_staff_lang_menu(update: Update) -> None:
     if not message:
         return
     await message.reply_text(
-        "🍒 CHERRY QUICK REPLY\n\nPlease choose staff language:",
+        staff_ui(DEFAULT_STAFF_LANG, "prompt_start"),
         reply_markup=staff_lang_keyboard(),
     )
 
@@ -214,7 +211,7 @@ async def send_customer_lang_menu(
         return
     staff = get_staff_lang(context)
     await message.reply_text(
-        f"Staff language: {staff_lang_name(staff)}\n\nPlease choose customer language:",
+        staff_ui(staff, "prompt_customer").format(staff=staff_lang_name(staff)),
         reply_markup=customer_lang_keyboard(),
     )
 
@@ -230,8 +227,8 @@ async def send_main_menu(
     staff = get_staff_lang(context)
     customer = get_customer_lang(context)
     await message.reply_text(
-        "🍒 CHERRY QUICK REPLY\n\nPlease choose menu:",
-        reply_markup=keyboard(main_menu_rows()),
+        staff_ui(staff, "prompt_main"),
+        reply_markup=keyboard(main_menu_rows(staff)),
     )
     logger.info(
         "main menu staff=%s customer=%s user=%s",
@@ -248,7 +245,7 @@ async def send_questions_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
     set_active_screen(context, SCREEN_QUESTIONS)
     staff = get_staff_lang(context)
     await message.reply_text(
-        BTN_MENU_QUESTIONS,
+        staff_ui(staff, "header_questions"),
         reply_markup=keyboard(question_menu_rows(staff)),
     )
 
@@ -260,7 +257,7 @@ async def send_replies_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     set_active_screen(context, SCREEN_REPLIES)
     staff = get_staff_lang(context)
     await message.reply_text(
-        BTN_MENU_REPLIES,
+        staff_ui(staff, "header_replies"),
         reply_markup=keyboard(reply_menu_rows(staff)),
     )
 
@@ -319,7 +316,7 @@ async def clear_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     if message:
         await message.reply_text(
-            "Session cleared.",
+            staff_ui(DEFAULT_STAFF_LANG, "session_cleared"),
             reply_markup=ReplyKeyboardRemove(),
         )
     await send_staff_lang_menu(update)
@@ -338,23 +335,24 @@ async def handle_main_menu_choice(
     context: ContextTypes.DEFAULT_TYPE,
     raw: str,
 ) -> bool:
-    if raw == BTN_MENU_QUESTIONS:
+    action = main_menu_action(raw)
+    if action == "questions":
         await send_questions_menu(update, context)
         return True
-    if raw == BTN_MENU_REPLIES:
+    if action == "replies":
         await send_replies_menu(update, context)
         return True
-    if raw == BTN_MENU_CHANGE_CUSTOMER:
+    if action == "change_customer":
         context.user_data.pop(CUSTOMER_LANG_SET_KEY, None)
         await send_customer_lang_menu(update, context)
         return True
-    if raw == BTN_MENU_CHANGE_STAFF:
+    if action == "change_staff":
         context.user_data.pop(STAFF_LANG_SET_KEY, None)
         context.user_data.pop(CUSTOMER_LANG_SET_KEY, None)
         context.user_data.pop(ACTIVE_SCREEN_KEY, None)
         await send_staff_lang_menu(update)
         return True
-    if raw == BTN_MENU_CLEAR:
+    if action == "clear":
         await clear_cmd(update, context)
         return True
     return False
@@ -523,7 +521,6 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("clear", clear_cmd))
     app.add_handler(CommandHandler("health", health_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    app.add_handler(MessageHandler(filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.COMMAND, handle_text))
     return app
 
