@@ -26,6 +26,10 @@ WEBHOOK_URL = os.getenv(
     "WEBHOOK_URL",
     "https://cherry-support-ai.onrender.com/telegram",
 ).strip()
+TRANSLATE_GROUP_ID = os.getenv("TRANSLATE_AI_GROUP_ID", "-1003860053672").strip()
+ALLOWED_USER_IDS = os.getenv("ALLOWED_USER_IDS", "1087968824").strip()
+EXPECTED_HEALTH = "V6.1-TRANSLATE-FIX"
+HEALTH_URL = "https://cherry-support-ai.onrender.com/health"
 
 
 def api_key() -> str:
@@ -108,6 +112,9 @@ def ensure_env_vars(service_id: str) -> None:
         "WEBHOOK_URL": WEBHOOK_URL,
         "TZ": "Asia/Phnom_Penh",
         "OPENAI_MODEL": "gpt-4o-mini",
+        "STAFF_GROUP_ID": TRANSLATE_GROUP_ID,
+        "TRANSLATE_AI_GROUP_ID": TRANSLATE_GROUP_ID,
+        "ALLOWED_USER_IDS": ALLOWED_USER_IDS,
     }
     bot = os.getenv("BOT_TOKEN", "").strip()
     if bot:
@@ -164,6 +171,22 @@ def resolve_service_id() -> str:
     raise SystemExit(f"Service {SERVICE_NAME} not found")
 
 
+def wait_health(expected: str = EXPECTED_HEALTH, timeout_sec: int = 120) -> str:
+    deadline = time.time() + timeout_sec
+    last = ""
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(HEALTH_URL, timeout=20) as resp:
+                last = resp.read().decode("utf-8", errors="replace").strip()
+                print(f"health: {last}")
+                if expected in last:
+                    return last
+        except Exception as exc:
+            print(f"health check: {exc}")
+        time.sleep(8)
+    raise SystemExit(f"Health never showed {expected!r}. Last: {last!r}")
+
+
 def main() -> int:
     service_id = resolve_service_id()
     print(f"Service: {SERVICE_NAME} ({service_id})")
@@ -191,8 +214,9 @@ def main() -> int:
         final = wait_deploy(service_id, deploy_id)
         print(f"Done: {final.get('status')} commit={final.get('commit', {}).get('id', '')}")
 
-    print("Check: https://cherry-support-ai.onrender.com/health")
-    print("Telegram: send /group in staff group")
+    health = wait_health()
+    print(f"OK — live health: {health}")
+    print("Telegram: /start in TRANSLATE_AI_GROUP → 5 language buttons")
     return 0
 
 
