@@ -27,7 +27,7 @@ WEBHOOK_URL = os.getenv(
     "https://cherry-support-ai.onrender.com/telegram",
 ).strip()
 ALLOWED_USER_IDS = os.getenv("ALLOWED_USER_IDS", "1087968824").strip()
-EXPECTED_HEALTH = "FIXED-V1"
+EXPECTED_HEALTH = "FIXED-V2"
 HEALTH_URL = "https://cherry-support-ai.onrender.com/health"
 
 

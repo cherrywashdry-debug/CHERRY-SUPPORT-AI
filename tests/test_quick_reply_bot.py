@@ -1,85 +1,92 @@
-"""Tests for CHERRY Quick Reply Bot — fixed replies, no AI."""
+"""Tests for CHERRY Quick Reply Bot — two-menu fixed replies, no AI."""
 from __future__ import annotations
 
 from quick_replies import (
     BTN_BACK,
-    COMMAND_TO_KEY,
+    BTN_MENU_QUESTIONS,
+    BTN_MENU_REPLIES,
+    QUESTION_BUTTONS,
+    QUESTION_KEY_ORDER,
+    QUESTIONS,
     QUICK_REPLIES,
+    REPLY_BUTTONS,
     REPLY_KEY_ORDER,
-    STAFF_BUTTONS,
-    customer_lang_from_label,
-    menu_rows,
-    parse_command,
+    parse_question_label,
+    parse_reply_label,
+    question_menu_rows,
+    question_text,
     quick_reply_text,
-    staff_lang_from_label,
+    reply_menu_rows,
 )
 
 
-def test_all_staff_buttons_map_to_same_keys() -> None:
-    km_keys = set(STAFF_BUTTONS["km"].keys())
-    th_keys = set(STAFF_BUTTONS["th"].keys())
-    id_keys = set(STAFF_BUTTONS["id"].keys())
-    assert km_keys == th_keys == id_keys
-    assert km_keys == set(REPLY_KEY_ORDER)
+def test_question_buttons_separate_from_replies() -> None:
+    q_cmds = {QUESTION_BUTTONS["km"][k] for k in QUESTION_KEY_ORDER}
+    r_cmds = {REPLY_BUTTONS["km"][k] for k in REPLY_KEY_ORDER}
+    assert q_cmds.isdisjoint(r_cmds)
 
 
-def test_all_replies_have_five_customer_languages() -> None:
+def test_all_question_keys_have_five_languages() -> None:
+    for key in QUESTION_KEY_ORDER:
+        block = QUESTIONS[key]
+        assert set(block.keys()) == {"th", "en", "km", "id", "cn"}
+
+
+def test_all_reply_keys_have_five_languages() -> None:
     for key in REPLY_KEY_ORDER:
         block = QUICK_REPLIES[key]
         assert set(block.keys()) == {"th", "en", "km", "id", "cn"}
-        for lang, text in block.items():
-            assert text.strip(), f"{key}/{lang} is empty"
 
 
-def test_khmer_staff_english_customer_ironing() -> None:
-    assert parse_command("/អ៊ុត") == "ironing"
-    reply = quick_reply_text("ironing", "en")
-    assert reply == "Sorry bong, we do not have ironing service."
+def test_khmer_reply_ironing() -> None:
+    assert parse_reply_label("❌ /មិនមានអ៊ុត") == "ironing"
+    text = quick_reply_text("ironing", "th")
+    assert "ไม่มีบริการรีดผ้า" in text
+    assert "CHERRY Wash & Dry" in text
 
 
-def test_thai_staff_khmer_customer_ironing() -> None:
-    assert parse_command("/รีดผ้า") == "ironing"
-    reply = quick_reply_text("ironing", "km")
-    assert "អ៊ុត" in reply or "មិនមាន" in reply
+def test_khmer_reply_no_shoes() -> None:
+    assert parse_reply_label("❌ /មិនមានស្បែកជើង") == "no_shoes"
+    text = quick_reply_text("no_shoes", "th")
+    assert "ไม่มีบริการซักรองเท้า" in text
 
 
-def test_indonesian_staff_chinese_customer_ironing() -> None:
-    assert parse_command("/setrika") == "ironing"
-    reply = quick_reply_text("ironing", "cn")
-    assert reply == "不好意思，我们没有熨烫服务。"
+def test_khmer_reply_before_service() -> None:
+    assert parse_reply_label("⚠️ /មុនប្រើសេវា") == "before_service"
+    text = quick_reply_text("before_service", "th")
+    assert "ข้อควรทราบก่อนใช้บริการ" in text
+    assert "1 ออเดอร์ = 1 เครื่อง" in text
 
 
-def test_separate_reply_examples() -> None:
-    assert quick_reply_text("separate", "en").startswith("We wash each customer")
-    assert "ไม่ซักรวม" in quick_reply_text("separate", "th")
-    assert "Maaf bong" in quick_reply_text("shoes", "id")
+def test_question_label_parsing() -> None:
+    assert parse_question_label("❓ /បោករួមរឺបោកផ្សេង") == "q_separate_wash"
+    assert parse_question_label("❓ /សូមផ្ញើរូបផ្ទះ") == "q_house_photo"
 
 
-def test_staff_language_labels() -> None:
-    assert staff_lang_from_label("🇰🇭 Khmer Staff") == "km"
-    assert staff_lang_from_label("🇹🇭 Thai Staff") == "th"
-    assert staff_lang_from_label("🇮🇩 Indonesian Staff") == "id"
+def test_submenu_has_back() -> None:
+    assert question_menu_rows("km")[-1] == [BTN_BACK]
+    assert reply_menu_rows("th")[-1] == [BTN_BACK]
 
 
-def test_customer_language_labels() -> None:
-    assert customer_lang_from_label("🇬🇧 English Customer") == "en"
-    assert customer_lang_from_label("🇨🇳 Chinese Customer") == "cn"
+def test_main_menu_labels() -> None:
+    assert BTN_MENU_QUESTIONS.startswith("❓")
+    assert BTN_MENU_REPLIES.startswith("💬")
 
 
-def test_menu_rows_count() -> None:
-    rows = menu_rows("th")
-    flat = [btn for row in rows for btn in row]
-    assert len(flat) == len(REPLY_KEY_ORDER) + 1
-    assert flat[-1] == BTN_BACK
+def test_reply_command_without_emoji() -> None:
+    assert parse_reply_label("/មិនមានអ៊ុត") == "ironing"
+    assert parse_reply_label("/ไม่มีรีดผ้า") == "ironing"
 
 
-def test_back_button_label() -> None:
-    from quick_replies import is_back_button
-
-    assert is_back_button("Back/ត្រលប់់")
-    assert not is_back_button("/ราคา")
-
-
-def test_command_lookup_case_insensitive_bot_suffix() -> None:
-    assert parse_command("/setrika@cherrybot") == "ironing"
-    assert COMMAND_TO_KEY["/harga"] == "price"
+if __name__ == "__main__":
+    test_question_buttons_separate_from_replies()
+    test_all_question_keys_have_five_languages()
+    test_all_reply_keys_have_five_languages()
+    test_khmer_reply_ironing()
+    test_khmer_reply_no_shoes()
+    test_khmer_reply_before_service()
+    test_question_label_parsing()
+    test_submenu_has_back()
+    test_main_menu_labels()
+    test_reply_command_without_emoji()
+    print("ALL OK")
