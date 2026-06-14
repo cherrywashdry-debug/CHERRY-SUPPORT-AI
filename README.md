@@ -8,7 +8,7 @@
 
 | แชท | โหมด | ทำอะไร |
 |-----|------|--------|
-| **กลุ่ม staff** (`STAFF_GROUP_ID`) | แปลภาษา | 📩 Customer Asked / ✍️ Staff Reply |
+| **กลุ่มแปล** (`STAFF_GROUP_ID` และ/หรือ `SUPPORT_AI_GROUP_ID`) | แปลภาษา | 📩 Customer Asked / ✍️ Staff Reply |
 | **แชทส่วนตัว / กลุ่มอื่น** | FAQ | เมนูคำตอบสำเร็จรูป (ไม่ใช้ AI ตอบอิสระ) |
 
 **BOT_TOKEN ตัวเดียว** — ไม่ต้องแยก 2 บอท
@@ -27,7 +27,8 @@
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `BOT_TOKEN` | Yes | Token บอท CHERRY SUPPORT AI |
-| `STAFF_GROUP_ID` | Yes | กลุ่ม staff สำหรับแปล |
+| `STAFF_GROUP_ID` | Yes* | กลุ่มแปล #1 |
+| `SUPPORT_AI_GROUP_ID` | Yes* | กลุ่มแปล #2 (CHERRY_SUPPORT_AI) |
 | `OPENAI_API_KEY` | Yes | สำหรับโหมดแปล |
 | `WEBHOOK_URL` | Yes | `https://cherry-support-ai.onrender.com/telegram` |
 | `ALLOWED_USER_IDS` | Optional | ทดสอบแปลใน DM |

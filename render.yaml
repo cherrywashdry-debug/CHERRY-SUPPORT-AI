@@ -19,6 +19,8 @@ services:
         sync: false
       - key: STAFF_GROUP_ID
         sync: false
+      - key: SUPPORT_AI_GROUP_ID
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: ALLOWED_USER_IDS

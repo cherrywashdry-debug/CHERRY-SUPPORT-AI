@@ -249,9 +249,21 @@ def staff_group_id() -> int | None:
     return parse_chat_id(os.getenv("STAFF_GROUP_ID", ""))
 
 
+def support_ai_group_id() -> int | None:
+    return parse_chat_id(os.getenv("SUPPORT_AI_GROUP_ID", ""))
+
+
+def translation_group_ids() -> frozenset[int]:
+    ids: set[int] = set()
+    for value in (staff_group_id(), support_ai_group_id()):
+        if value is not None:
+            ids.add(value)
+    return frozenset(ids)
+
+
 def is_setup_mode() -> bool:
-    """True until STAFF_GROUP_ID is set on Render — allows setup commands in any staff group."""
-    return staff_group_id() is None
+    """True until at least one translation group ID is set on Render."""
+    return not translation_group_ids()
 
 
 def allowed_user_ids() -> frozenset[int]:
@@ -318,8 +330,7 @@ def is_staff_chat(update: Update) -> bool:
         if chat.type in ("group", "supergroup"):
             return True
         return user is not None and user.id in allowed_user_ids()
-    group = staff_group_id()
-    if group and chat.id == group:
+    if chat.id in translation_group_ids():
         return True
     return (
         user is not None
@@ -866,8 +877,9 @@ def format_group_id_message(update: Update) -> str:
         lines.extend([
             f"Group / ក្រុម: {chat.title or '-'}",
             "",
-            "Copy this line to Render → Environment:",
+            "Copy to Render → Environment (use the line for this group):",
             f"STAFF_GROUP_ID={chat.id}",
+            f"SUPPORT_AI_GROUP_ID={chat.id}",
             "",
             "Then click Manual Deploy.",
         ])
@@ -884,17 +896,20 @@ def format_group_id_message(update: Update) -> str:
             f"Your user ID: {user.id}",
             f"(optional) ALLOWED_USER_IDS={user.id}",
         ])
-    configured = staff_group_id()
-    if configured is not None:
-        match = chat and chat.id == configured
+    configured = translation_group_ids()
+    if configured:
+        match = bool(chat and chat.id in configured)
+        staff_cfg = staff_group_id()
+        support_cfg = support_ai_group_id()
         lines.extend([
             "",
-            f"STAFF_GROUP_ID on server: {configured}",
+            f"STAFF_GROUP_ID on server: {staff_cfg if staff_cfg is not None else 'not set'}",
+            f"SUPPORT_AI_GROUP_ID on server: {support_cfg if support_cfg is not None else 'not set'}",
             f"This chat matches: {'YES' if match else 'NO'}",
         ])
     else:
         lines.append("")
-        lines.append("STAFF_GROUP_ID on server: not set yet")
+        lines.append("Translation groups on server: not set yet")
     return "\n".join(lines)
 
 

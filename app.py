@@ -1,6 +1,6 @@
 """CHERRY SUPPORT AI — one bot, two modes by chat.
 
-Staff group (STAFF_GROUP_ID): translation for staff.
+Staff groups (`STAFF_GROUP_ID` and/or `SUPPORT_AI_GROUP_ID`): translation for staff.
 Everywhere else (private chat, other groups): FAQ menu.
 """
 from __future__ import annotations
@@ -34,7 +34,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.support_ai")
 
-VERSION = "CHERRY SUPPORT AI - UNIFIED-FAQ-STAFF-V2"
+VERSION = "CHERRY SUPPORT AI - UNIFIED-FAQ-STAFF-V3"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
