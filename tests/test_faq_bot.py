@@ -28,7 +28,7 @@ from faq_content import (  # noqa: E402
     faq_answer,
     normalize_lang,
 )
-from app import ALL_KNOWN_BUTTONS, resolve_button_action  # noqa: E402
+from faq_handlers import ALL_KNOWN_BUTTONS, resolve_button_action  # noqa: E402
 
 
 class TestLanguage(unittest.TestCase):

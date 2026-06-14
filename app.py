@@ -1,7 +1,7 @@
-"""CHERRY SUPPORT AI — standalone FAQ Telegram bot.
+"""CHERRY SUPPORT AI — one bot, two modes by chat.
 
-Not connected to CHERRY BOT V3. No orders, invoices, rewards, or delivery logic.
-Answers come only from locked FAQ content in faq_content.py.
+Staff group (STAFF_GROUP_ID): translation for staff.
+Everywhere else (private chat, other groups): FAQ menu.
 """
 from __future__ import annotations
 
@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from telegram import ReplyKeyboardMarkup, Update
+from telegram import Update
 from telegram.ext import (
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -21,53 +22,9 @@ from telegram.ext import (
     filters,
 )
 
-from faq_content import (
-    BTN_BACK,
-    BTN_CHANGE_LANG,
-    BTN_CONTACT,
-    BTN_DELIVERY_BACK,
-    BTN_DELIVERY_FEE,
-    BTN_DETERGENT,
-    BTN_HOW_PICKUP,
-    BTN_LAUNDRY,
-    BTN_LAUNDRY_BAG,
-    BTN_LAUNDRY_PRICE,
-    BTN_LANG_EN,
-    BTN_LANG_ID,
-    BTN_LANG_KM,
-    BTN_LANG_TH,
-    BTN_LOCATION,
-    BTN_NO_IRONING,
-    BTN_OPENING_HOURS,
-    BTN_PICKUP_DELIVERY,
-    BTN_PICKUP_TIME,
-    BTN_PRICE_DELIVERY,
-    BTN_PROCESSING_TIME,
-    BTN_READ_BEFORE,
-    BTN_REWARDS,
-    BTN_SEPARATE_MIXED,
-    BTN_SHOP_RESP,
-    BTN_SPECIAL_ITEMS,
-    BTN_3DAY,
-    BTN_VALUABLE,
-    BUTTON_CONTENT_KEYS,
-    DEFAULT_LANG,
-    LANG_BUTTONS,
-    LANG_MENU_ROWS,
-    LAUNDRY_SUBMENU_ROWS,
-    MAIN_MENU_ROWS,
-    PICKUP_SUBMENU_ROWS,
-    PRICE_SUBMENU_ROWS,
-    READ_BEFORE_SUBMENU_ROWS,
-    SUBMENU_FOR_BUTTON,
-    SUBMENU_TRIGGERS,
-    LANGUAGE_SET_MESSAGES,
-    SUPPORTED_LANGS,
-    faq_answer,
-    normalize_lang,
-    submenu_intro,
-    ui_text,
-)
+import faq_handlers as faq
+import staff_translate as staff
+from staff_translate import is_staff_chat
 
 load_dotenv()
 
@@ -75,194 +32,71 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
     level=logging.INFO,
 )
-logger = logging.getLogger("cherry.support_faq")
+logger = logging.getLogger("cherry.support_ai")
 
-VERSION = "CHERRY SUPPORT AI - FAQ-V1"
+VERSION = "CHERRY SUPPORT AI - UNIFIED-FAQ-STAFF-V1"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
-USER_LANG_KEY = "faq_lang"
-
-ALL_KNOWN_BUTTONS = frozenset(
-    {BTN_BACK, BTN_CHANGE_LANG, BTN_LANG_EN, BTN_LANG_TH, BTN_LANG_KM, BTN_LANG_ID}
-    | set(BUTTON_CONTENT_KEYS)
-    | SUBMENU_TRIGGERS
-)
 
 
-def get_user_lang(context: ContextTypes.DEFAULT_TYPE) -> str:
-    return normalize_lang(str(context.user_data.get(USER_LANG_KEY, DEFAULT_LANG)))
+async def route_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if is_staff_chat(update):
+        await staff.start_cmd(update, context)
+    else:
+        await faq.start_cmd(update, context)
 
 
-def set_user_lang(context: ContextTypes.DEFAULT_TYPE, lang: str) -> str:
-    normalized = normalize_lang(lang)
-    context.user_data[USER_LANG_KEY] = normalized
-    return normalized
+async def route_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if is_staff_chat(update):
+        await staff.menu_cmd(update, context)
+    else:
+        await faq.menu_cmd(update, context)
 
 
-def keyboard(rows: list[list[str]], *, resize: bool = True) -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(rows, resize_keyboard=resize)
+async def route_lang(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if is_staff_chat(update):
+        await staff.lang_cmd(update, context)
+    else:
+        await faq.language_cmd(update, context)
 
 
-def main_menu_keyboard() -> ReplyKeyboardMarkup:
-    return keyboard(MAIN_MENU_ROWS)
+async def route_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await route_lang(update, context)
 
 
-def lang_menu_keyboard() -> ReplyKeyboardMarkup:
-    return keyboard(LANG_MENU_ROWS)
-
-
-def submenu_keyboard(submenu: str) -> ReplyKeyboardMarkup:
-    mapping = {
-        "price": PRICE_SUBMENU_ROWS,
-        "laundry": LAUNDRY_SUBMENU_ROWS,
-        "pickup": PICKUP_SUBMENU_ROWS,
-        "read_before": READ_BEFORE_SUBMENU_ROWS,
-    }
-    return keyboard(mapping[submenu])
-
-
-def resolve_button_action(text: str) -> dict[str, Any] | None:
-    """Map pressed button label to bot action. Pure function for testing."""
-    label = str(text or "").strip()
-    if not label:
-        return None
-
-    if label == BTN_BACK:
-        return {"type": "main_menu"}
-
-    if label == BTN_CHANGE_LANG:
-        return {"type": "language_menu"}
-
-    if label in LANG_BUTTONS:
-        return {"type": "set_language", "lang": LANG_BUTTONS[label]}
-
-    if label in SUBMENU_TRIGGERS:
-        return {"type": "submenu", "submenu": SUBMENU_FOR_BUTTON[label]}
-
-    if label in BUTTON_CONTENT_KEYS:
-        return {"type": "answer", "content_key": BUTTON_CONTENT_KEYS[label]}
-
-    return None
-
-
-async def send_main_menu(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    *,
-    prefix: str | None = None,
-) -> None:
-    message = update.effective_message
-    if not message:
+async def route_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if is_staff_chat(update):
+        await staff.group_cmd(update, context)
         return
-    lang = get_user_lang(context)
-    body = prefix or ui_text(lang, "welcome")
-    await message.reply_text(body, reply_markup=main_menu_keyboard())
-
-
-async def send_language_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    message = update.effective_message
-    if not message:
-        return
-    lang = get_user_lang(context)
-    await message.reply_text(
-        ui_text(lang, "choose_language"),
-        reply_markup=lang_menu_keyboard(),
-    )
-
-
-async def send_submenu(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    submenu: str,
-) -> None:
-    message = update.effective_message
-    if not message:
-        return
-    lang = get_user_lang(context)
-    await message.reply_text(
-        submenu_intro(lang, submenu),
-        reply_markup=submenu_keyboard(submenu),
-    )
-
-
-async def send_faq_answer(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    content_key: str,
-) -> None:
-    message = update.effective_message
-    if not message:
-        return
-    lang = get_user_lang(context)
-    answer = faq_answer(lang, content_key)
-    if not answer:
-        await message.reply_text(
-            ui_text(lang, "unknown_input"),
-            reply_markup=main_menu_keyboard(),
-        )
-        return
-    await message.reply_text(answer, reply_markup=main_menu_keyboard())
-
-
-async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await send_main_menu(update, context)
-
-
-async def menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    lang = get_user_lang(context)
-    await send_main_menu(update, context, prefix=ui_text(lang, "menu_hint"))
-
-
-async def language_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await send_language_menu(update, context)
-
-
-async def health_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     if message:
-        await message.reply_text(f"OK {VERSION}")
-
-
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    message = update.effective_message
-    if not message or not message.text:
-        return
-
-    raw = message.text.strip()
-    if raw.startswith("/"):
-        return
-
-    action = resolve_button_action(raw)
-    if not action:
-        lang = get_user_lang(context)
         await message.reply_text(
-            ui_text(lang, "unknown_input"),
-            reply_markup=main_menu_keyboard(),
+            "โหมด FAQ ค่ะ\n\n"
+            "สำหรับตั้งค่ากลุ่มแปล: ส่ง /group ในกลุ่ม staff ที่ตั้ง STAFF_GROUP_ID"
         )
-        return
 
-    action_type = action["type"]
-    if action_type == "main_menu":
-        await send_main_menu(update, context)
-        return
 
-    if action_type == "language_menu":
-        await send_language_menu(update, context)
-        return
+async def route_health(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if is_staff_chat(update):
+        await staff.health_cmd(update, context)
+    else:
+        await faq.health_cmd(update, context)
 
-    if action_type == "set_language":
-        lang = set_user_lang(context, action["lang"])
-        confirm = LANGUAGE_SET_MESSAGES.get(lang, LANGUAGE_SET_MESSAGES[DEFAULT_LANG])
-        await send_main_menu(update, context, prefix=confirm)
-        return
 
-    if action_type == "submenu":
-        await send_submenu(update, context, action["submenu"])
-        return
+async def route_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if is_staff_chat(update):
+        await staff.handle_staff_text(update, context)
+    else:
+        await faq.handle_text(update, context)
 
-    if action_type == "answer":
-        await send_faq_answer(update, context, action["content_key"])
+
+async def route_staff_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_staff_chat(update):
+        query = update.callback_query
+        if query:
+            await query.answer()
         return
+    await staff.staff_ai_callback(update, context)
 
 
 def build_health_response() -> str:
@@ -270,7 +104,6 @@ def build_health_response() -> str:
 
 
 def _install_health_route() -> None:
-    """Add GET /health to PTB tornado webhook app (Render health checks)."""
     import tornado.web
     from telegram.ext._utils import webhookhandler as wh
 
@@ -345,17 +178,24 @@ def build_app() -> Application:
         .concurrent_updates(True)
         .build()
     )
-    app.add_handler(CommandHandler("start", start_cmd))
-    app.add_handler(CommandHandler("menu", menu_cmd))
-    app.add_handler(CommandHandler("language", language_cmd))
-    app.add_handler(CommandHandler("lang", language_cmd))
-    app.add_handler(CommandHandler("health", health_cmd))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_error_handler(staff.on_error)
+    app.add_handler(CommandHandler("start", route_start))
+    app.add_handler(CommandHandler("menu", route_menu))
+    app.add_handler(CommandHandler("lang", route_lang))
+    app.add_handler(CommandHandler("language", route_language))
+    app.add_handler(CommandHandler("group", route_group))
+    app.add_handler(CommandHandler("chatid", route_group))
+    app.add_handler(CommandHandler("id", route_group))
+    app.add_handler(CommandHandler("health", route_health))
+    app.add_handler(CallbackQueryHandler(route_staff_callback, pattern=r"^staffai:"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, route_text))
     return app
 
 
 def main() -> None:
     logger.info("Starting %s", VERSION)
+    if not staff.KNOWLEDGE_PATH.is_file():
+        logger.warning("Missing knowledge file at %s", staff.KNOWLEDGE_PATH)
     app = build_app()
     webhook_url = resolve_webhook_url()
     port = int(os.getenv("PORT", "8080"))
