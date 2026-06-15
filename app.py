@@ -12,9 +12,10 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.ext import (
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -50,6 +51,7 @@ from quick_replies import (
     staff_ui,
 )
 from reply_store import save_reply
+import staff_users
 
 load_dotenv()
 
@@ -59,7 +61,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - FIXED-V2.6"
+VERSION = "CHERRY QUICK REPLY - FIXED-V2.7"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -74,27 +76,31 @@ SCREEN_QUESTIONS = "questions"
 SCREEN_REPLIES = "replies"
 SCREEN_EDIT_KEYS = "edit_keys"
 SCREEN_EDIT_LANG = "edit_lang"
+SCREEN_STAFF_MGMT = "staff_mgmt"
+SCREEN_REMOVE_STAFF = "remove_staff"
+
+BTN_STAFF_MGMT = "👩‍💼 Staff Management"
+BTN_STAFF_LIST = "📋 Staff List"
+BTN_REMOVE_STAFF = "➖ Remove Staff"
+BTN_PENDING_REQUESTS = "🔄 Pending Requests"
+
+ACCESS_GATE_TEXT = (
+    "⛔ CHERRY STAFF ONLY\n\n"
+    "This bot is for approved CHERRY staff only.\n\n"
+    "Please press /register to request access."
+)
+ACCESS_APPROVED_TEXT = (
+    "✅ Access approved.\n"
+    "You can now use CHERRY Quick Reply Bot."
+)
+ACCESS_REJECTED_TEXT = (
+    "❌ Access rejected.\n"
+    "Please contact owner."
+)
 
 EDIT_AWAITING_KEY = "edit_awaiting"
 EDIT_KEY_KEY = "edit_reply_key"
 EDIT_LANG_KEY = "edit_reply_lang"
-
-
-def parse_allowed_user_ids(raw: str) -> frozenset[int]:
-    ids: set[int] = set()
-    for part in str(raw or "").split(","):
-        part = part.strip()
-        if not part:
-            continue
-        try:
-            ids.add(int(part))
-        except ValueError:
-            continue
-    return frozenset(ids)
-
-
-def allowed_user_ids() -> frozenset[int]:
-    return parse_allowed_user_ids(os.getenv("ALLOWED_USER_IDS", ""))
 
 
 def owner_telegram_id() -> int | None:
@@ -113,12 +119,21 @@ def is_owner(update: Update) -> bool:
     return oid is not None and user is not None and user.id == oid
 
 
-def is_staff_user(update: Update) -> bool:
+def has_staff_access(update: Update) -> bool:
     user = update.effective_user
-    allowed = allowed_user_ids()
-    if not allowed:
-        return user is not None
-    return user is not None and user.id in allowed
+    if user is None:
+        return False
+    if is_owner(update):
+        return True
+    return staff_users.is_active_staff(user.id)
+
+
+def user_label(user: Any) -> tuple[str, str, int]:
+    if user is None:
+        return "Unknown", "", 0
+    name = user.full_name or user.first_name or "Unknown"
+    username = f"@{user.username}" if user.username else "No username"
+    return name, username, int(user.id)
 
 
 def get_staff_lang(context: ContextTypes.DEFAULT_TYPE) -> str:
@@ -229,12 +244,63 @@ def customer_lang_name(code: str) -> str:
 
 
 async def deny_if_not_staff(update: Update) -> bool:
-    if is_staff_user(update):
+    if has_staff_access(update):
         return False
     message = update.effective_message
     if message:
-        await message.reply_text("This bot is for CHERRY staff only.")
+        await message.reply_text(ACCESS_GATE_TEXT)
     return True
+
+
+async def send_access_gate(update: Update) -> None:
+    message = update.effective_message
+    if message:
+        await message.reply_text(ACCESS_GATE_TEXT, reply_markup=ReplyKeyboardRemove())
+
+
+def build_main_menu_keyboard(staff_lang: str, *, is_owner_user: bool) -> ReplyKeyboardMarkup:
+    rows = list(main_menu_rows(staff_lang))
+    if is_owner_user:
+        rows.insert(-1, [BTN_STAFF_MGMT])
+    return keyboard(rows)
+
+
+def staff_mgmt_menu_rows(staff_lang: str) -> list[list[str]]:
+    from quick_replies import back_button
+
+    return [
+        [BTN_STAFF_LIST],
+        [BTN_REMOVE_STAFF, BTN_PENDING_REQUESTS],
+        [back_button(staff_lang)],
+    ]
+
+
+def remove_staff_menu_rows(staff_lang: str) -> tuple[list[list[str]], dict[str, int]]:
+    from quick_replies import back_button
+
+    label_to_id: dict[str, int] = {}
+    rows: list[list[str]] = []
+    for row in staff_users.list_active_staff():
+        uid = int(row["user_id"])
+        if uid == owner_telegram_id():
+            continue
+        label = staff_users.staff_display_name(row)
+        label_to_id[label] = uid
+        rows.append([label])
+    rows.append([back_button(staff_lang)])
+    return rows, label_to_id
+
+
+def staff_request_keyboard(user_id: int) -> InlineKeyboardMarkup:
+    uid = int(user_id)
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("✅ Approve", callback_data=f"staff:approve:{uid}"),
+                InlineKeyboardButton("❌ Reject", callback_data=f"staff:reject:{uid}"),
+            ]
+        ]
+    )
 
 
 async def send_staff_lang_menu(update: Update) -> None:
@@ -273,7 +339,7 @@ async def send_main_menu(
     customer = get_customer_lang(context)
     await message.reply_text(
         staff_ui(staff, "prompt_main"),
-        reply_markup=keyboard(main_menu_rows(staff)),
+        reply_markup=build_main_menu_keyboard(staff, is_owner_user=is_owner(update)),
     )
     logger.info(
         "main menu staff=%s customer=%s user=%s",
@@ -362,6 +428,89 @@ async def prompt_edit_reply_text(
     )
 
 
+async def send_staff_mgmt_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    if not message:
+        return
+    if not is_owner(update):
+        await message.reply_text(OWNER_ACCESS_DENIED)
+        return
+    set_active_screen(context, SCREEN_STAFF_MGMT)
+    staff = get_staff_lang(context)
+    await message.reply_text(
+        "👩‍💼 Staff Management",
+        reply_markup=keyboard(staff_mgmt_menu_rows(staff)),
+    )
+
+
+async def send_staff_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    if not message or not is_owner(update):
+        return
+    active = staff_users.list_active_staff()
+    if not active:
+        text = "📋 Staff List\n\nNo approved staff yet."
+    else:
+        lines = ["📋 Staff List", ""]
+        for row in active:
+            status = str(row.get("status", "unknown"))
+            lines.append(f"• {staff_users.staff_display_name(row)} [{status}]")
+        text = "\n".join(lines)
+    staff = get_staff_lang(context)
+    await message.reply_text(text, reply_markup=keyboard(staff_mgmt_menu_rows(staff)))
+
+
+async def send_pending_requests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    if not message or not is_owner(update):
+        return
+    pending = staff_users.list_pending_requests()
+    staff = get_staff_lang(context)
+    if not pending:
+        await message.reply_text(
+            "🔄 Pending Requests\n\nNo pending requests.",
+            reply_markup=keyboard(staff_mgmt_menu_rows(staff)),
+        )
+        return
+    await message.reply_text(
+        "🔄 Pending Requests",
+        reply_markup=keyboard(staff_mgmt_menu_rows(staff)),
+    )
+    for row in pending:
+        uid = int(row["user_id"])
+        username = str(row.get("username") or "No username")
+        if username and not username.startswith("@"):
+            username = f"@{username.lstrip('@')}"
+        text = (
+            "📩 Pending Staff Access Request\n\n"
+            f"Name: {row.get('name', 'Unknown')}\n"
+            f"Username: {username}\n"
+            f"Telegram ID: {uid}"
+        )
+        await message.reply_text(text, reply_markup=staff_request_keyboard(uid))
+
+
+async def send_remove_staff_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    if not message or not is_owner(update):
+        return
+    staff = get_staff_lang(context)
+    rows, label_to_id = remove_staff_menu_rows(staff)
+    context.user_data["remove_staff_map"] = label_to_id
+    set_active_screen(context, SCREEN_REMOVE_STAFF)
+    if len(label_to_id) == 0:
+        await message.reply_text(
+            "➖ Remove Staff\n\nNo removable staff found.",
+            reply_markup=keyboard(staff_mgmt_menu_rows(staff)),
+        )
+        set_active_screen(context, SCREEN_STAFF_MGMT)
+        return
+    await message.reply_text(
+        "➖ Remove Staff\n\nSelect staff to disable:",
+        reply_markup=keyboard(rows),
+    )
+
+
 async def ensure_ready_for_main(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -405,10 +554,87 @@ async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if await deny_if_not_staff(update):
+    if not has_staff_access(update):
+        await send_access_gate(update)
         return
     clear_session(context)
     await send_staff_lang_menu(update)
+
+
+async def register_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    user = update.effective_user
+    if not message or not user:
+        return
+    if has_staff_access(update):
+        await message.reply_text("You already have access. Press /start to continue.")
+        return
+    if staff_users.has_pending_request(user.id):
+        await message.reply_text("Your access request is already pending.")
+        return
+    name, username, uid = user_label(user)
+    try:
+        staff_users.add_pending_request(uid, name, username)
+    except ValueError as exc:
+        await message.reply_text(str(exc))
+        return
+
+    oid = owner_telegram_id()
+    if oid is None:
+        await message.reply_text("Owner is not configured. Please contact admin.")
+        return
+
+    owner_text = (
+        "📩 New Staff Access Request\n\n"
+        f"Name: {name}\n"
+        f"Username: {username}\n"
+        f"Telegram ID: {uid}"
+    )
+    await context.bot.send_message(
+        chat_id=oid,
+        text=owner_text,
+        reply_markup=staff_request_keyboard(uid),
+    )
+    await message.reply_text("Access request sent to owner. Please wait for approval.")
+
+
+async def staff_access_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query or not query.data:
+        return
+    if not is_owner(update):
+        await query.answer("Owner only.", show_alert=True)
+        return
+    await query.answer()
+    parts = query.data.split(":")
+    if len(parts) != 3 or parts[0] != "staff":
+        return
+    action, uid_raw = parts[1], parts[2]
+    try:
+        uid = int(uid_raw)
+    except ValueError:
+        return
+
+    pending = next((r for r in staff_users.list_pending_requests() if int(r["user_id"]) == uid), None)
+    name = str(pending.get("name", "Staff")) if pending else "Staff"
+    username = str(pending.get("username", "")) if pending else ""
+
+    if action == "approve":
+        staff_users.approve_staff(uid, name=name, username=username)
+        try:
+            await context.bot.send_message(chat_id=uid, text=ACCESS_APPROVED_TEXT)
+        except Exception as exc:
+            logger.warning("notify approved staff failed uid=%s err=%s", uid, exc)
+        if query.message:
+            await query.message.reply_text(f"✅ Approved staff ID {uid}")
+    elif action == "reject":
+        staff_users.reject_staff(uid)
+        try:
+            await context.bot.send_message(chat_id=uid, text=ACCESS_REJECTED_TEXT)
+        except Exception as exc:
+            logger.warning("notify rejected staff failed uid=%s err=%s", uid, exc)
+        if query.message:
+            await query.message.reply_text(f"❌ Rejected staff ID {uid}")
 
 
 async def language_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -487,6 +713,9 @@ async def handle_main_menu_choice(
     if action == "edit_replies":
         await send_edit_keys_menu(update, context)
         return True
+    if raw == BTN_STAFF_MGMT:
+        await send_staff_mgmt_menu(update, context)
+        return True
     return False
 
 
@@ -548,10 +777,43 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     if is_back_button(raw):
+        if get_active_screen(context) in (SCREEN_STAFF_MGMT, SCREEN_REMOVE_STAFF):
+            set_active_screen(context, SCREEN_MAIN)
+            await send_main_menu(update, context)
+            return
         await send_main_menu(update, context)
         return
 
     screen = get_active_screen(context)
+
+    if screen == SCREEN_STAFF_MGMT and is_owner(update):
+        if raw == BTN_STAFF_LIST:
+            await send_staff_list(update, context)
+            return
+        if raw == BTN_REMOVE_STAFF:
+            await send_remove_staff_menu(update, context)
+            return
+        if raw == BTN_PENDING_REQUESTS:
+            await send_pending_requests(update, context)
+            return
+        await send_staff_mgmt_menu(update, context)
+        return
+
+    if screen == SCREEN_REMOVE_STAFF and is_owner(update):
+        staff_map = context.user_data.get("remove_staff_map") or {}
+        if raw in staff_map:
+            uid = int(staff_map[raw])
+            try:
+                staff_users.disable_staff(uid)
+                await message.reply_text(f"➖ Staff disabled: {uid}")
+            except ValueError as exc:
+                await message.reply_text(str(exc))
+            context.user_data.pop("remove_staff_map", None)
+            set_active_screen(context, SCREEN_STAFF_MGMT)
+            await send_staff_mgmt_menu(update, context)
+            return
+        await send_remove_staff_menu(update, context)
+        return
 
     if screen == SCREEN_EDIT_KEYS:
         if raw == BTN_EDIT_REPLIES:
@@ -573,8 +835,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await send_edit_lang_menu(update, context, reply_key)
         return
 
-    if screen == SCREEN_MAIN or is_main_menu_label(raw):
-        if is_main_menu_label(raw):
+    if screen == SCREEN_MAIN or is_main_menu_label(raw) or raw == BTN_STAFF_MGMT:
+        if is_main_menu_label(raw) or raw == BTN_STAFF_MGMT:
+            if raw == BTN_STAFF_MGMT:
+                await send_staff_mgmt_menu(update, context)
+                return
             await handle_main_menu_choice(update, context, raw)
             return
         await send_main_menu(update, context)
@@ -687,6 +952,7 @@ def build_app() -> Application:
         .build()
     )
     app.add_handler(CommandHandler("start", start_cmd))
+    app.add_handler(CommandHandler("register", register_cmd))
     app.add_handler(CommandHandler("language", language_cmd))
     app.add_handler(CommandHandler("lang", language_cmd))
     app.add_handler(CommandHandler("customer", customer_cmd))
@@ -694,6 +960,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("clear", clear_cmd))
     app.add_handler(CommandHandler("cancel", cancel_cmd))
     app.add_handler(CommandHandler("health", health_cmd))
+    app.add_handler(CallbackQueryHandler(staff_access_callback, pattern=r"^staff:(approve|reject):\d+$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.COMMAND, handle_text))
     return app

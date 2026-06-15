@@ -7,5 +7,7 @@ __pycache__/
 venv/
 quick_replies.json
 quick_replies_backup.json
+staff_users.json
+staff_users_backup.json
 data/quick_replies.json
 test_report.txt
