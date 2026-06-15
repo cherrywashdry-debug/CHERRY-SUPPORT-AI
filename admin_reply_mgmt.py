@@ -13,6 +13,7 @@ from quick_replies import (
     BTN_ADMIN_BACK,
     BTN_ADMIN_DELETE,
     BTN_ADMIN_EDIT,
+    BTN_EDIT_REPLIES_LEGACY,
     BTN_REPLY_MGMT,
     EDIT_LANG_LABELS,
     OWNER_ACCESS_DENIED,
@@ -448,7 +449,7 @@ async def handle_reply_mgmt_screen(
     staff = get_staff_lang(context)
     screen = str(context.user_data.get("active_screen", ""))
 
-    if raw == BTN_REPLY_MGMT:
+    if raw == BTN_REPLY_MGMT or raw == BTN_EDIT_REPLIES_LEGACY:
         await send_reply_mgmt_menu(update, context)
         return True
 

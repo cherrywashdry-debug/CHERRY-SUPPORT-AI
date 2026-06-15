@@ -317,9 +317,14 @@ def back_button(staff_lang: str) -> str:
     return staff_ui(staff_lang, "back")
 
 
+def is_reply_management_main_label(text: str) -> bool:
+    raw = str(text or "").strip()
+    return raw in (BTN_REPLY_MGMT, BTN_EDIT_REPLIES_LEGACY)
+
+
 def main_menu_action(text: str) -> str | None:
     raw = str(text or "").strip()
-    if raw in (BTN_REPLY_MGMT, BTN_EDIT_REPLIES_LEGACY):
+    if is_reply_management_main_label(raw):
         return "reply_management"
     action_keys = (
         "menu_questions",

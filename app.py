@@ -24,6 +24,7 @@ from telegram.ext import (
 )
 
 from quick_replies import (
+    BTN_EDIT_REPLIES_LEGACY,
     BTN_REPLY_MGMT,
     CUSTOMER_LANG_LABELS,
     DEFAULT_CUSTOMER_LANG,
@@ -67,7 +68,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - FIXED-V3.0"
+VERSION = "CHERRY QUICK REPLY - FIXED-V3.1"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -315,6 +316,14 @@ async def send_customer_lang_menu(
     )
 
 
+def clear_legacy_edit_persistence(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Drop pre-Reply-Management session keys/screens from persisted state."""
+    for key in ("edit_awaiting", "edit_reply_key", "edit_reply_lang"):
+        context.user_data.pop(key, None)
+    if get_active_screen(context) in ("edit_keys", "edit_lang"):
+        set_active_screen(context, SCREEN_MAIN)
+
+
 async def send_main_menu(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -322,6 +331,7 @@ async def send_main_menu(
     message = update.effective_message
     if not message:
         return
+    clear_legacy_edit_persistence(context)
     set_active_screen(context, SCREEN_MAIN)
     staff = get_staff_lang(context)
     customer = get_customer_lang(context)
@@ -699,6 +709,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     if not await ensure_ready_for_main(update, context):
+        return
+
+    # Main menu entry: Reply Management (new label + legacy cached "Edit Replies" keyboard)
+    if raw in (BTN_REPLY_MGMT, BTN_EDIT_REPLIES_LEGACY):
+        await send_reply_mgmt_menu(update, context)
         return
 
     if await handle_admin_text(update, context, raw):
