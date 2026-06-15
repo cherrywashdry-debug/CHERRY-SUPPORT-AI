@@ -5,6 +5,7 @@ import json
 import logging
 import shutil
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ BACKUP_PATH = ROOT / "quick_replies_backup.json"
 SEED_PATH = ROOT / "quick_replies_seed.json"
 
 CUSTOMER_LANGS = frozenset({"th", "en", "km", "id", "cn"})
+TODO_TEXT = "TODO"
 
 _cache: dict[str, dict[str, str]] | None = None
 
@@ -90,7 +92,21 @@ def reload_replies() -> dict[str, dict[str, str]]:
     return load_replies(force=True)
 
 
-def save_reply(key: str, lang: str, text: str) -> None:
+def _timestamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+
+
+def backup_replies_file() -> Path | None:
+    if not JSON_PATH.is_file():
+        return None
+    dest = ROOT / f"quick_replies_backup_{_timestamp()}.json"
+    shutil.copy2(JSON_PATH, dest)
+    shutil.copy2(JSON_PATH, BACKUP_PATH)
+    logger.info("Backed up replies to %s", dest.name)
+    return dest
+
+
+def save_reply(key: str, lang: str, text: str, *, backup: bool = True) -> None:
     lang_key = str(lang).strip().lower()
     if lang_key not in CUSTOMER_LANGS:
         raise ValueError(f"unsupported language: {lang}")
@@ -105,8 +121,8 @@ def save_reply(key: str, lang: str, text: str) -> None:
     updated = {k: dict(v) for k, v in current.items()}
     updated[key][lang_key] = new_text
 
-    if JSON_PATH.is_file():
-        shutil.copy2(JSON_PATH, BACKUP_PATH)
+    if backup:
+        backup_replies_file()
 
     try:
         _write_json(JSON_PATH, updated)
@@ -118,3 +134,59 @@ def save_reply(key: str, lang: str, text: str) -> None:
     global _cache
     _cache = updated
     logger.info("Updated reply key=%s lang=%s", key, lang_key)
+
+
+def add_reply(key: str, texts: dict[str, str], *, backup: bool = True) -> None:
+    key_name = str(key).strip().lower()
+    if not key_name:
+        raise ValueError("reply key cannot be empty")
+    current = load_replies()
+    if key_name in current:
+        raise ValueError(f"reply key already exists: {key_name}")
+
+    block: dict[str, str] = {}
+    for lang in CUSTOMER_LANGS:
+        raw = str(texts.get(lang, TODO_TEXT))
+        if not raw.strip():
+            raw = TODO_TEXT
+        block[lang] = raw
+
+    updated = {k: dict(v) for k, v in current.items()}
+    updated[key_name] = block
+
+    if backup:
+        backup_replies_file()
+
+    try:
+        _write_json(JSON_PATH, updated)
+    except Exception:
+        if BACKUP_PATH.is_file() and not JSON_PATH.is_file():
+            shutil.copy2(BACKUP_PATH, JSON_PATH)
+        raise
+
+    global _cache
+    _cache = updated
+    logger.info("Added reply key=%s", key_name)
+
+
+def delete_reply(key: str, *, backup: bool = True) -> None:
+    key_name = str(key).strip()
+    current = load_replies()
+    if key_name not in current:
+        raise ValueError(f"unknown reply key: {key_name}")
+
+    updated = {k: dict(v) for k, v in current.items() if k != key_name}
+
+    if backup:
+        backup_replies_file()
+
+    try:
+        _write_json(JSON_PATH, updated)
+    except Exception:
+        if BACKUP_PATH.is_file() and not JSON_PATH.is_file():
+            shutil.copy2(BACKUP_PATH, JSON_PATH)
+        raise
+
+    global _cache
+    _cache = updated
+    logger.info("Deleted reply key=%s", key_name)

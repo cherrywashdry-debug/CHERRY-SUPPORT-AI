@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from quick_replies import (
-    APPROVED_REPLY_BUTTONS,
+    REPLY_BUTTONS,
     REPLY_KEY_ORDER,
     get_quick_replies,
     parse_reply_label,
@@ -45,7 +45,8 @@ def test_reply_key_order() -> None:
 
 
 def test_v2_khmer_reply_buttons() -> None:
-    assert APPROVED_REPLY_BUTTONS["laundry_ready"] == "📦 /រួចរាល់"
+    km = REPLY_BUTTONS["km"]
+    assert km["laundry_ready"] == "📦 /រួចរាល់"
     assert parse_reply_label("/រួចរាល់") == "laundry_ready"
     assert parse_reply_label("/កំពុងទៅ") == "staff_on_the_way_delivery"
     assert parse_reply_label("/កំពុងទៅយក") == "staff_on_the_way_pickup"

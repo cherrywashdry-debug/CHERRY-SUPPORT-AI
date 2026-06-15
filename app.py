@@ -24,33 +24,39 @@ from telegram.ext import (
 )
 
 from quick_replies import (
-    BTN_EDIT_REPLIES,
+    BTN_REPLY_MGMT,
     CUSTOMER_LANG_LABELS,
     DEFAULT_CUSTOMER_LANG,
     DEFAULT_STAFF_LANG,
     OWNER_ACCESS_DENIED,
     STAFF_LANG_LABELS,
     customer_lang_from_label,
-    edit_lang_display,
-    edit_lang_menu_rows,
-    edit_reply_key_menu_rows,
-    get_quick_replies,
     is_back_button,
     is_main_menu_label,
     main_menu_action,
     main_menu_rows,
-    parse_edit_lang,
-    parse_edit_reply_key,
     parse_question_label,
     parse_reply_label,
+    parse_status_label,
     question_menu_rows,
     question_text,
     quick_reply_text,
     reply_menu_rows,
     staff_lang_from_label,
     staff_ui,
+    status_menu_rows,
 )
-from reply_store import save_reply
+from admin_reply_mgmt import (
+    SCREEN_ADMIN_DELETE_KEYS,
+    SCREEN_ADMIN_EDIT_KEYS,
+    SCREEN_ADMIN_EDIT_LANG,
+    SCREEN_REPLY_MGMT,
+    admin_callback,
+    clear_admin_state,
+    handle_admin_text,
+    handle_reply_mgmt_screen,
+    send_reply_mgmt_menu,
+)
 import staff_users
 
 load_dotenv()
@@ -61,7 +67,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - FIXED-V2.7"
+VERSION = "CHERRY QUICK REPLY - FIXED-V2.8"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -74,8 +80,7 @@ ACTIVE_SCREEN_KEY = "active_screen"  # main | questions | replies
 SCREEN_MAIN = "main"
 SCREEN_QUESTIONS = "questions"
 SCREEN_REPLIES = "replies"
-SCREEN_EDIT_KEYS = "edit_keys"
-SCREEN_EDIT_LANG = "edit_lang"
+SCREEN_STATUS = "status"
 SCREEN_STAFF_MGMT = "staff_mgmt"
 SCREEN_REMOVE_STAFF = "remove_staff"
 
@@ -97,10 +102,6 @@ ACCESS_REJECTED_TEXT = (
     "❌ Access rejected.\n"
     "Please contact owner."
 )
-
-EDIT_AWAITING_KEY = "edit_awaiting"
-EDIT_KEY_KEY = "edit_reply_key"
-EDIT_LANG_KEY = "edit_reply_lang"
 
 
 def owner_telegram_id() -> int | None:
@@ -185,28 +186,15 @@ def set_customer_lang(context: ContextTypes.DEFAULT_TYPE, code: str) -> str:
 
 
 def clear_session(context: ContextTypes.DEFAULT_TYPE) -> None:
+    clear_admin_state(context)
     for key in (
         STAFF_LANG_KEY,
         CUSTOMER_LANG_KEY,
         STAFF_LANG_SET_KEY,
         CUSTOMER_LANG_SET_KEY,
         ACTIVE_SCREEN_KEY,
-        EDIT_AWAITING_KEY,
-        EDIT_KEY_KEY,
-        EDIT_LANG_KEY,
     ):
         context.user_data.pop(key, None)
-
-
-def clear_edit_state(context: ContextTypes.DEFAULT_TYPE) -> bool:
-    had = any(
-        context.user_data.pop(key, None) is not None
-        for key in (EDIT_AWAITING_KEY, EDIT_KEY_KEY, EDIT_LANG_KEY)
-    )
-    if get_active_screen(context) in (SCREEN_EDIT_KEYS, SCREEN_EDIT_LANG):
-        context.user_data.pop(ACTIVE_SCREEN_KEY, None)
-        had = True
-    return had
 
 
 def keyboard(rows: list[list[str]], *, resize: bool = True) -> ReplyKeyboardMarkup:
@@ -373,58 +361,15 @@ async def send_replies_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
 
 
-async def send_edit_keys_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def send_status_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     if not message:
         return
-    if not is_owner(update):
-        await message.reply_text(OWNER_ACCESS_DENIED)
-        return
-    context.user_data.pop(EDIT_AWAITING_KEY, None)
-    context.user_data.pop(EDIT_KEY_KEY, None)
-    context.user_data.pop(EDIT_LANG_KEY, None)
-    set_active_screen(context, SCREEN_EDIT_KEYS)
+    set_active_screen(context, SCREEN_STATUS)
     staff = get_staff_lang(context)
     await message.reply_text(
-        "🔧 Edit Replies\n\nSelect reply key:",
-        reply_markup=keyboard(edit_reply_key_menu_rows(staff)),
-    )
-
-
-async def send_edit_lang_menu(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    reply_key: str,
-) -> None:
-    message = update.effective_message
-    if not message:
-        return
-    context.user_data[EDIT_KEY_KEY] = reply_key
-    context.user_data.pop(EDIT_AWAITING_KEY, None)
-    context.user_data.pop(EDIT_LANG_KEY, None)
-    set_active_screen(context, SCREEN_EDIT_LANG)
-    await message.reply_text(
-        "Please choose language to edit:",
-        reply_markup=keyboard(edit_lang_menu_rows()),
-    )
-
-
-async def prompt_edit_reply_text(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    reply_key: str,
-    lang: str,
-) -> None:
-    message = update.effective_message
-    if not message:
-        return
-    context.user_data[EDIT_KEY_KEY] = reply_key
-    context.user_data[EDIT_LANG_KEY] = lang
-    context.user_data[EDIT_AWAITING_KEY] = True
-    current = get_quick_replies()[reply_key][lang]
-    await message.reply_text(
-        f"Current text:\n\n{current}\n\nSend new reply text now.\nSend /cancel to cancel.",
-        reply_markup=ReplyKeyboardRemove(),
+        staff_ui(staff, "menu_status"),
+        reply_markup=keyboard(status_menu_rows(staff)),
     )
 
 
@@ -543,12 +488,12 @@ async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if await deny_if_not_staff(update):
         return
     message = update.effective_message
-    if not clear_edit_state(context):
+    if not clear_admin_state(context):
         if message:
             await message.reply_text("Nothing to cancel.")
         return
     if message:
-        await message.reply_text("Edit cancelled.")
+        await message.reply_text("Cancelled.")
     if await ensure_ready_for_main(update, context):
         await send_main_menu(update, context)
 
@@ -697,6 +642,9 @@ async def handle_main_menu_choice(
     if action == "replies":
         await send_replies_menu(update, context)
         return True
+    if action == "status":
+        await send_status_menu(update, context)
+        return True
     if action == "change_customer":
         context.user_data.pop(CUSTOMER_LANG_SET_KEY, None)
         await send_customer_lang_menu(update, context)
@@ -710,8 +658,8 @@ async def handle_main_menu_choice(
     if action == "clear":
         await clear_cmd(update, context)
         return True
-    if action == "edit_replies":
-        await send_edit_keys_menu(update, context)
+    if action == "reply_management":
+        await send_reply_mgmt_menu(update, context)
         return True
     if raw == BTN_STAFF_MGMT:
         await send_staff_mgmt_menu(update, context)
@@ -753,31 +701,21 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not await ensure_ready_for_main(update, context):
         return
 
-    if context.user_data.get(EDIT_AWAITING_KEY):
-        if not is_owner(update):
-            clear_edit_state(context)
-            await message.reply_text(OWNER_ACCESS_DENIED)
-            await send_main_menu(update, context)
-            return
-        reply_key = str(context.user_data.get(EDIT_KEY_KEY, ""))
-        reply_lang = str(context.user_data.get(EDIT_LANG_KEY, ""))
-        try:
-            save_reply(reply_key, reply_lang, raw)
-        except Exception as exc:
-            logger.exception("reply save failed")
-            await message.reply_text(f"Save failed: {exc}\nPrevious reply kept.")
-            return
-        clear_edit_state(context)
-        await message.reply_text(
-            "✅ Reply updated successfully.\n"
-            f"Key: {reply_key}\n"
-            f"Language: {edit_lang_display(reply_lang)}",
-        )
-        await send_main_menu(update, context)
+    if await handle_admin_text(update, context, raw):
         return
 
     if is_back_button(raw):
-        if get_active_screen(context) in (SCREEN_STAFF_MGMT, SCREEN_REMOVE_STAFF):
+        clear_admin_state(context)
+        screen = get_active_screen(context)
+        if screen in (
+            SCREEN_REPLY_MGMT,
+            SCREEN_ADMIN_EDIT_KEYS,
+            SCREEN_ADMIN_EDIT_LANG,
+            SCREEN_ADMIN_DELETE_KEYS,
+        ):
+            if await handle_reply_mgmt_screen(update, context, raw):
+                return
+        if screen in (SCREEN_STAFF_MGMT, SCREEN_REMOVE_STAFF):
             set_active_screen(context, SCREEN_MAIN)
             await send_main_menu(update, context)
             return
@@ -785,6 +723,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     screen = get_active_screen(context)
+
+    if screen in (
+        SCREEN_REPLY_MGMT,
+        SCREEN_ADMIN_EDIT_KEYS,
+        SCREEN_ADMIN_EDIT_LANG,
+        SCREEN_ADMIN_DELETE_KEYS,
+    ):
+        if await handle_reply_mgmt_screen(update, context, raw):
+            return
+        if not is_owner(update):
+            await message.reply_text(OWNER_ACCESS_DENIED)
+            await send_main_menu(update, context)
+            return
 
     if screen == SCREEN_STAFF_MGMT and is_owner(update):
         if raw == BTN_STAFF_LIST:
@@ -813,26 +764,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await send_staff_mgmt_menu(update, context)
             return
         await send_remove_staff_menu(update, context)
-        return
-
-    if screen == SCREEN_EDIT_KEYS:
-        if raw == BTN_EDIT_REPLIES:
-            await send_edit_keys_menu(update, context)
-            return
-        edit_key = parse_edit_reply_key(raw)
-        if edit_key:
-            await send_edit_lang_menu(update, context, edit_key)
-            return
-        await send_edit_keys_menu(update, context)
-        return
-
-    if screen == SCREEN_EDIT_LANG:
-        edit_lang = parse_edit_lang(raw)
-        reply_key = str(context.user_data.get(EDIT_KEY_KEY, ""))
-        if edit_lang and reply_key in get_quick_replies():
-            await prompt_edit_reply_text(update, context, reply_key, edit_lang)
-            return
-        await send_edit_lang_menu(update, context, reply_key)
         return
 
     if screen == SCREEN_MAIN or is_main_menu_label(raw) or raw == BTN_STAFF_MGMT:
@@ -866,6 +797,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await message.reply_text(
             answer,
             reply_markup=keyboard(reply_menu_rows(get_staff_lang(context))),
+        )
+        return
+
+    if screen == SCREEN_STATUS:
+        s_key = parse_status_label(raw)
+        if not s_key:
+            await send_status_menu(update, context)
+            return
+        answer = quick_reply_text(s_key, get_customer_lang(context))
+        await message.reply_text(
+            answer,
+            reply_markup=keyboard(status_menu_rows(get_staff_lang(context))),
         )
         return
 
@@ -961,6 +904,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("cancel", cancel_cmd))
     app.add_handler(CommandHandler("health", health_cmd))
     app.add_handler(CallbackQueryHandler(staff_access_callback, pattern=r"^staff:(approve|reject):\d+$"))
+    app.add_handler(CallbackQueryHandler(admin_callback, pattern=r"^admin:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.COMMAND, handle_text))
     return app

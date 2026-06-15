@@ -4,7 +4,7 @@ from __future__ import annotations
 import sys
 
 from quick_replies import (
-    APPROVED_REPLY_BUTTONS,
+    REPLY_BUTTONS,
     CUSTOMER_LANG_LABELS,
     REPLY_KEY_ORDER,
     STAFF_LANG_LABELS,
@@ -107,10 +107,10 @@ def test_customer_language_buttons() -> None:
 
 def test_pack_v1_buttons_present() -> None:
     for key in PACK_V1_KEYS:
-        assert key in APPROVED_REPLY_BUTTONS
+        assert key in REPLY_BUTTONS["km"]
     flat = [b for row in reply_menu_rows("km") for b in row if b != "ត្រឡប់"]
     for key in PACK_V1_KEYS:
-        assert APPROVED_REPLY_BUTTONS[key] in flat
+        assert REPLY_BUTTONS["km"][key] in flat
 
 
 def test_all_pack_v1_languages() -> list[str]:
@@ -144,7 +144,7 @@ def print_report() -> None:
 
     print("\n[3] Replies To Customer — Pack V1 (8 buttons, Khmer staff view)")
     for key in PACK_V1_KEYS:
-        print(f"  OK  {APPROVED_REPLY_BUTTONS[key]}  → KEY={key}")
+        print(f"  OK  {REPLY_BUTTONS['km'][key]}  → KEY={key}")
     extra = len(REPLY_KEY_ORDER) - 8
     if extra:
         print(f"  NOTE: menu also has {extra} Pack V2 buttons (not in this test scope)")
@@ -157,7 +157,7 @@ def print_report() -> None:
             first_line = text.split("\n")[0]
             marker = MARKERS[key][lang_code]
             status = "PASS" if marker in text else "FAIL"
-            print(f"  {status}  {APPROVED_REPLY_BUTTONS[key]}")
+            print(f"  {status}  {REPLY_BUTTONS['km'][key]}")
             print(f"        → {first_line}")
 
     print("\n[5] Forbidden features (code scan)")

@@ -1,6 +1,7 @@
 """Fixed quick replies for CHERRY Quick Reply Bot — edit approved text here only."""
 from __future__ import annotations
 
+from reply_button_store import category_buttons, category_key_order, load_button_config, reload_button_config
 from reply_store import load_replies
 
 STAFF_LANGS = frozenset({"km", "th", "id"})
@@ -36,7 +37,8 @@ STAFF_UI: dict[str, dict[str, str]] = {
         "menu_change_customer": "🌐 ប្តូរភាសាអតិថិជន",
         "menu_change_staff": "👩‍💼 ប្តូរភាសាបុគ្គលិក",
         "menu_clear": "🧹 លុប Session",
-        "menu_edit_replies": "🔧 Edit Replies",
+        "menu_edit_replies": "🔧 Reply Management",
+        "menu_status": f"{EMOJI_TRUCK} Status Updates",
         "back": "ត្រឡប់",
         "prompt_start": "🍒 CHERRY QUICK REPLY\n\nសូមជ្រើសរើសភាសាបុគ្គលិក:",
         "prompt_customer": "ភាសាបុគ្គលិក: {staff}\n\nសូមជ្រើសរើសភាសាអតិថិជន:",
@@ -52,7 +54,8 @@ STAFF_UI: dict[str, dict[str, str]] = {
         "menu_change_customer": "🌐 เปลี่ยนภาษาลูกค้า",
         "menu_change_staff": "👩‍💼 เปลี่ยนภาษาพนักงาน",
         "menu_clear": "🧹 ล้าง Session",
-        "menu_edit_replies": "🔧 Edit Replies",
+        "menu_edit_replies": "🔧 Reply Management",
+        "menu_status": f"{EMOJI_TRUCK} Status Updates",
         "back": "กลับ",
         "prompt_start": "🍒 CHERRY QUICK REPLY\n\nกรุณาเลือกภาษาพนักงาน:",
         "prompt_customer": "ภาษาพนักงาน: {staff}\n\nกรุณาเลือกภาษาลูกค้า:",
@@ -68,7 +71,8 @@ STAFF_UI: dict[str, dict[str, str]] = {
         "menu_change_customer": "🌐 Ganti Bahasa Pelanggan",
         "menu_change_staff": "👩‍💼 Ganti Bahasa Staff",
         "menu_clear": "🧹 Hapus Session",
-        "menu_edit_replies": "🔧 Edit Replies",
+        "menu_edit_replies": "🔧 Reply Management",
+        "menu_status": f"{EMOJI_TRUCK} Status Updates",
         "back": "Kembali",
         "prompt_start": "🍒 CHERRY QUICK REPLY\n\nPilih bahasa staff:",
         "prompt_customer": "Bahasa staff: {staff}\n\nPilih bahasa pelanggan:",
@@ -87,25 +91,21 @@ BTN_MENU_CHANGE_CUSTOMER = STAFF_UI["km"]["menu_change_customer"]
 BTN_MENU_CHANGE_STAFF = STAFF_UI["km"]["menu_change_staff"]
 BTN_MENU_CLEAR = STAFF_UI["km"]["menu_clear"]
 BTN_EDIT_REPLIES = STAFF_UI["km"]["menu_edit_replies"]
+BTN_REPLY_MGMT = BTN_EDIT_REPLIES
 
-# Owner edit — reply key picker (emoji + key name)
-EDIT_REPLY_KEY_LABELS: dict[str, str] = {
-    "price": f"{EMOJI_MONEY} price",
-    "delivery_fee": f"{EMOJI_TRUCK} delivery_fee",
-    "opening_hours": f"{EMOJI_CLOCK} opening_hours",
-    "processing_time": f"{EMOJI_HOURGLASS} processing_time",
-    "points": f"{EMOJI_GIFT} points",
-    "ironing": f"{EMOJI_CROSS} ironing",
-    "no_shoes": f"{EMOJI_CROSS} no_shoes",
-    "before_service": f"{EMOJI_WARN} before_service",
-    "laundry_ready": f"{EMOJI_PACKAGE} laundry_ready",
-    "staff_on_the_way_delivery": f"{EMOJI_TRUCK} staff_on_the_way_delivery",
-    "staff_on_the_way_pickup": f"{EMOJI_SCOOTER} staff_on_the_way_pickup",
-    "ask_location": f"{EMOJI_PIN} ask_location",
-    "ask_home_photo": f"{EMOJI_HOUSE} ask_home_photo",
-    "ask_bag_photo": f"{EMOJI_BAG} ask_bag_photo",
-    "payment_method": f"{EMOJI_CARD} payment_method",
-    "ask_separate_or_together": f"{EMOJI_BASKET} ask_separate_or_together",
+BTN_ADMIN_EDIT = "✏️ Edit Reply"
+BTN_ADMIN_ADD = "➕ Add Reply"
+BTN_ADMIN_DELETE = "➖ Delete Reply"
+BTN_ADMIN_BACK = "⬅️ Back"
+
+BTN_CAT_QUESTIONS = "❓ Questions To Customer"
+BTN_CAT_REPLIES = "💬 Replies To Customer"
+BTN_CAT_STATUS = "🚚 Status Updates"
+
+LABEL_TO_ADMIN_CATEGORY: dict[str, str] = {
+    BTN_CAT_QUESTIONS: "questions_to_customer",
+    BTN_CAT_REPLIES: "replies_to_customer",
+    BTN_CAT_STATUS: "status_updates",
 }
 
 EDIT_LANG_LABELS: dict[str, str] = {
@@ -116,10 +116,19 @@ EDIT_LANG_LABELS: dict[str, str] = {
     "cn": "🇨🇳 CN",
 }
 
-LABEL_TO_EDIT_KEY: dict[str, str] = {label: key for key, label in EDIT_REPLY_KEY_LABELS.items()}
 LABEL_TO_EDIT_LANG: dict[str, str] = {label: code for code, label in EDIT_LANG_LABELS.items()}
 
-OWNER_ACCESS_DENIED = "⛔ Access denied.\nThis menu is for owner only."
+OWNER_ACCESS_DENIED = "⛔ Access denied.\nOwner only."
+
+# ── Button mappings loaded from quick_reply_buttons.json ─────────────────────
+QUESTION_KEY_ORDER: list[str] = []
+REPLY_KEY_ORDER: list[str] = []
+STATUS_KEY_ORDER: list[str] = []
+QUESTION_BUTTONS: dict[str, dict[str, str]] = {"km": {}, "th": {}, "id": {}}
+REPLY_BUTTONS: dict[str, dict[str, str]] = {"km": {}, "th": {}, "id": {}}
+STATUS_BUTTONS: dict[str, dict[str, str]] = {"km": {}, "th": {}, "id": {}}
+EDIT_REPLY_KEY_LABELS: dict[str, str] = {}
+LABEL_TO_EDIT_KEY: dict[str, str] = {}
 
 # ── Staff / customer language pickers ─────────────────────────────────────────
 STAFF_LANG_LABELS: dict[str, str] = {
@@ -134,138 +143,6 @@ CUSTOMER_LANG_LABELS: dict[str, str] = {
     "km": "🇰🇭 Khmer Customer",
     "id": "🇮🇩 Indonesian Customer",
     "cn": "🇨🇳 Chinese Customer",
-}
-
-# ── Menu 1: Questions to customer (staff buttons) ─────────────────────────────
-QUESTION_KEY_ORDER: list[str] = [
-    "q_separate_wash",
-    "q_location",
-    "q_house_photo",
-    "q_send_location",
-    "q_delivery_time",
-    "q_pickup_time",
-    "q_payment",
-    "q_bag_photo",
-    "q_confirm_wash",
-]
-
-# ── Approved staff buttons (same Khmer labels for all staff languages) ────────
-APPROVED_QUESTION_BUTTONS: dict[str, str] = {
-    "q_separate_wash": f"{EMOJI_QUESTION} /បោករួមរឺបោកផ្សេង",
-    "q_location": f"{EMOJI_QUESTION} /ទីតាំង",
-    "q_house_photo": f"{EMOJI_QUESTION} /សូមផ្ញើរូបផ្ទះ",
-    "q_send_location": f"{EMOJI_QUESTION} /សូមផ្ញើទីតាំង",
-    "q_delivery_time": f"{EMOJI_QUESTION} /ឲ្យបុគ្គលិកដឹកអោយម៉ោងប៉ុន្មាន",
-    "q_pickup_time": f"{EMOJI_QUESTION} /ឱ្យបុគ្គលិកទៅយកម៉ោងប៉ុន្មាន",
-    "q_payment": f"{EMOJI_QUESTION} /បង់ប្រាក់",
-    "q_bag_photo": f"{EMOJI_QUESTION} /សូមផ្ញើរូបកាបូប",
-    "q_confirm_wash": f"{EMOJI_QUESTION} /បញ្ជាក់ការបោក",
-}
-
-APPROVED_REPLY_BUTTONS: dict[str, str] = {
-    "price": f"{EMOJI_MONEY} /តម្លៃ",
-    "delivery_fee": f"{EMOJI_TRUCK} /ថ្លៃដឹក",
-    "opening_hours": f"{EMOJI_CLOCK} /ម៉ោងបើក",
-    "processing_time": f"{EMOJI_HOURGLASS} /រយៈពេល",
-    "points": f"{EMOJI_GIFT} /ពិន្ទុ",
-    "ironing": f"{EMOJI_CROSS} /មិនមានអ៊ុត",
-    "no_shoes": f"{EMOJI_CROSS} /មិនមានស្បែកជើង",
-    "before_service": f"{EMOJI_WARN} /មុនប្រើសេវា",
-    # Reply Pack V2
-    "laundry_ready": f"{EMOJI_PACKAGE} /រួចរាល់",
-    "staff_on_the_way_delivery": f"{EMOJI_TRUCK} /កំពុងទៅ",
-    "staff_on_the_way_pickup": f"{EMOJI_SCOOTER} /កំពុងទៅយក",
-    "ask_location": f"{EMOJI_PIN} /សូមផ្ញើទីតាំង",
-    "ask_home_photo": f"{EMOJI_HOUSE} /សូមផ្ញើរូបផ្ទះ",
-    "ask_bag_photo": f"{EMOJI_BAG} /សូមផ្ញើរូបកាបូប",
-    "payment_method": f"{EMOJI_CARD} /បង់ប្រាក់",
-    "ask_separate_or_together": f"{EMOJI_BASKET} /បោករួមរឺបោកផ្សេង",
-}
-
-REPLY_KEY_ORDER: list[str] = [
-    "price",
-    "delivery_fee",
-    "opening_hours",
-    "processing_time",
-    "points",
-    "ironing",
-    "no_shoes",
-    "before_service",
-    # Reply Pack V2
-    "laundry_ready",
-    "staff_on_the_way_delivery",
-    "staff_on_the_way_pickup",
-    "ask_location",
-    "ask_home_photo",
-    "ask_bag_photo",
-    "payment_method",
-    "ask_separate_or_together",
-]
-
-QUESTION_BUTTONS: dict[str, dict[str, str]] = {
-    "km": dict(APPROVED_QUESTION_BUTTONS),
-    "th": {
-        "q_separate_wash": f"{EMOJI_QUESTION} /ซักรวมไหม",
-        "q_location": f"{EMOJI_QUESTION} /โลเคชั่น",
-        "q_house_photo": f"{EMOJI_QUESTION} /ส่งรูปบ้าน",
-        "q_send_location": f"{EMOJI_QUESTION} /ส่งโลเคชั่น",
-        "q_delivery_time": f"{EMOJI_QUESTION} /ส่งกี่โมง",
-        "q_pickup_time": f"{EMOJI_QUESTION} /รับกี่โมง",
-        "q_payment": f"{EMOJI_QUESTION} /ชำระเงิน",
-        "q_bag_photo": f"{EMOJI_QUESTION} /ส่งรูปถุงผ้า",
-        "q_confirm_wash": f"{EMOJI_QUESTION} /ยืนยันการซัก",
-    },
-    "id": {
-        "q_separate_wash": f"{EMOJI_QUESTION} /campuratauterpisah",
-        "q_location": f"{EMOJI_QUESTION} /lokasi",
-        "q_house_photo": f"{EMOJI_QUESTION} /fotorumah",
-        "q_send_location": f"{EMOJI_QUESTION} /kirimlokasi",
-        "q_delivery_time": f"{EMOJI_QUESTION} /antarjamberapa",
-        "q_pickup_time": f"{EMOJI_QUESTION} /jemputjamberapa",
-        "q_payment": f"{EMOJI_QUESTION} /pembayaran",
-        "q_bag_photo": f"{EMOJI_QUESTION} /fototas",
-        "q_confirm_wash": f"{EMOJI_QUESTION} /konfirmasicuci",
-    },
-}
-
-REPLY_BUTTONS: dict[str, dict[str, str]] = {
-    "km": dict(APPROVED_REPLY_BUTTONS),
-    "th": {
-        "price": f"{EMOJI_MONEY} /ราคา",
-        "delivery_fee": f"{EMOJI_TRUCK} /ค่าส่ง",
-        "opening_hours": f"{EMOJI_CLOCK} /เวลาเปิด",
-        "processing_time": f"{EMOJI_HOURGLASS} /ระยะเวลา",
-        "points": f"{EMOJI_GIFT} /แต้ม",
-        "ironing": f"{EMOJI_CROSS} /ไม่มีรีดผ้า",
-        "no_shoes": f"{EMOJI_CROSS} /ไม่มีซักรองเท้า",
-        "before_service": f"{EMOJI_WARN} /ก่อนใช้บริการ",
-        "laundry_ready": f"{EMOJI_PACKAGE} /พร้อมแล้ว",
-        "staff_on_the_way_delivery": f"{EMOJI_TRUCK} /กำลังไปส่ง",
-        "staff_on_the_way_pickup": f"{EMOJI_SCOOTER} /กำลังไปรับ",
-        "ask_location": f"{EMOJI_PIN} /ส่งโลเคชั่น",
-        "ask_home_photo": f"{EMOJI_HOUSE} /ส่งรูปบ้าน",
-        "ask_bag_photo": f"{EMOJI_BAG} /ส่งรูปถุงผ้า",
-        "payment_method": f"{EMOJI_CARD} /ชำระเงิน",
-        "ask_separate_or_together": f"{EMOJI_BASKET} /ซักแยกหรือรวม",
-    },
-    "id": {
-        "price": f"{EMOJI_MONEY} /harga",
-        "delivery_fee": f"{EMOJI_TRUCK} /ongkir",
-        "opening_hours": f"{EMOJI_CLOCK} /jambuka",
-        "processing_time": f"{EMOJI_HOURGLASS} /waktu",
-        "points": f"{EMOJI_GIFT} /poin",
-        "ironing": f"{EMOJI_CROSS} /tidaksetrika",
-        "no_shoes": f"{EMOJI_CROSS} /tidakcucisepatu",
-        "before_service": f"{EMOJI_WARN} /sebelumlayanan",
-        "laundry_ready": f"{EMOJI_PACKAGE} /sudahsiap",
-        "staff_on_the_way_delivery": f"{EMOJI_TRUCK} /sedangantar",
-        "staff_on_the_way_pickup": f"{EMOJI_SCOOTER} /sedangjemput",
-        "ask_location": f"{EMOJI_PIN} /kirimlokasi",
-        "ask_home_photo": f"{EMOJI_HOUSE} /fotorumah",
-        "ask_bag_photo": f"{EMOJI_BAG} /fototas",
-        "payment_method": f"{EMOJI_CARD} /pembayaran",
-        "ask_separate_or_together": f"{EMOJI_BASKET} /campuratauterpisah",
-    },
 }
 
 # ── Question texts for customer ───────────────────────────────────────────────
@@ -359,8 +236,10 @@ def reload_quick_replies() -> dict[str, dict[str, str]]:
 # ── Lookups ───────────────────────────────────────────────────────────────────
 LABEL_TO_QUESTION_KEY: dict[str, str] = {}
 LABEL_TO_REPLY_KEY: dict[str, str] = {}
+LABEL_TO_STATUS_KEY: dict[str, str] = {}
 COMMAND_TO_QUESTION_KEY: dict[str, str] = {}
 COMMAND_TO_REPLY_KEY: dict[str, str] = {}
+COMMAND_TO_STATUS_KEY: dict[str, str] = {}
 
 
 def _register_command(cmd_map: dict[str, str], label: str, key: str) -> None:
@@ -372,15 +251,63 @@ def _register_command(cmd_map: dict[str, str], label: str, key: str) -> None:
         cmd_map[token] = key
 
 
-for _lang, buttons in QUESTION_BUTTONS.items():
-    for key, label in buttons.items():
-        _register_command(LABEL_TO_QUESTION_KEY, label, key)
-        _register_command(COMMAND_TO_QUESTION_KEY, label, key)
+def _key_picker_label(key: str) -> str:
+    for buttons in (REPLY_BUTTONS.get("km", {}), STATUS_BUTTONS.get("km", {}), QUESTION_BUTTONS.get("km", {})):
+        raw = buttons.get(key)
+        if raw:
+            emoji = raw.split()[0] if raw.split() else "📝"
+            return f"{emoji} {key}"
+    return key
 
-for _lang, buttons in REPLY_BUTTONS.items():
-    for key, label in buttons.items():
-        _register_command(LABEL_TO_REPLY_KEY, label, key)
-        _register_command(COMMAND_TO_REPLY_KEY, label, key)
+
+def _load_button_maps() -> None:
+    global QUESTION_KEY_ORDER, REPLY_KEY_ORDER, STATUS_KEY_ORDER
+    global QUESTION_BUTTONS, REPLY_BUTTONS, STATUS_BUTTONS
+    global EDIT_REPLY_KEY_LABELS, LABEL_TO_EDIT_KEY
+    global LABEL_TO_QUESTION_KEY, LABEL_TO_REPLY_KEY, LABEL_TO_STATUS_KEY
+    global COMMAND_TO_QUESTION_KEY, COMMAND_TO_REPLY_KEY, COMMAND_TO_STATUS_KEY
+
+    load_button_config()
+    QUESTION_KEY_ORDER = category_key_order("questions_to_customer")
+    REPLY_KEY_ORDER = category_key_order("replies_to_customer")
+    STATUS_KEY_ORDER = category_key_order("status_updates")
+    QUESTION_BUTTONS = {lang: category_buttons("questions_to_customer", lang) for lang in STAFF_LANGS}
+    REPLY_BUTTONS = {lang: category_buttons("replies_to_customer", lang) for lang in STAFF_LANGS}
+    STATUS_BUTTONS = {lang: category_buttons("status_updates", lang) for lang in STAFF_LANGS}
+
+    reply_keys = sorted(get_quick_replies().keys())
+    EDIT_REPLY_KEY_LABELS = {key: _key_picker_label(key) for key in reply_keys}
+    LABEL_TO_EDIT_KEY = {label: key for key, label in EDIT_REPLY_KEY_LABELS.items()}
+
+    LABEL_TO_QUESTION_KEY.clear()
+    LABEL_TO_REPLY_KEY.clear()
+    LABEL_TO_STATUS_KEY.clear()
+    COMMAND_TO_QUESTION_KEY.clear()
+    COMMAND_TO_REPLY_KEY.clear()
+    COMMAND_TO_STATUS_KEY.clear()
+
+    for _lang, buttons in QUESTION_BUTTONS.items():
+        for key, label in buttons.items():
+            _register_command(LABEL_TO_QUESTION_KEY, label, key)
+            _register_command(COMMAND_TO_QUESTION_KEY, label, key)
+
+    for _lang, buttons in REPLY_BUTTONS.items():
+        for key, label in buttons.items():
+            _register_command(LABEL_TO_REPLY_KEY, label, key)
+            _register_command(COMMAND_TO_REPLY_KEY, label, key)
+
+    for _lang, buttons in STATUS_BUTTONS.items():
+        for key, label in buttons.items():
+            _register_command(LABEL_TO_STATUS_KEY, label, key)
+            _register_command(COMMAND_TO_STATUS_KEY, label, key)
+
+
+def refresh_button_maps() -> None:
+    reload_button_config()
+    _load_button_maps()
+
+
+_load_button_maps()
 
 
 def staff_ui(staff_lang: str, key: str) -> str:
@@ -394,11 +321,12 @@ def back_button(staff_lang: str) -> str:
 
 def main_menu_action(text: str) -> str | None:
     raw = str(text or "").strip()
-    if raw == BTN_EDIT_REPLIES:
-        return "edit_replies"
+    if raw == BTN_REPLY_MGMT:
+        return "reply_management"
     action_keys = (
         "menu_questions",
         "menu_replies",
+        "menu_status",
         "menu_change_customer",
         "menu_change_staff",
         "menu_clear",
@@ -406,6 +334,7 @@ def main_menu_action(text: str) -> str | None:
     action_map = {
         "menu_questions": "questions",
         "menu_replies": "replies",
+        "menu_status": "status",
         "menu_change_customer": "change_customer",
         "menu_change_staff": "change_staff",
         "menu_clear": "clear",
@@ -464,19 +393,53 @@ def _rows_one_per_label(labels: list[str], staff_lang: str) -> list[list[str]]:
 def main_menu_rows(staff_lang: str) -> list[list[str]]:
     lang = normalize_staff_lang(staff_lang)
     ui = STAFF_UI[lang]
-    return [
+    rows = [
         [ui["menu_questions"]],
         [ui["menu_replies"]],
-        [ui["menu_edit_replies"]],
-        [ui["menu_change_customer"], ui["menu_change_staff"]],
-        [ui["menu_clear"]],
+    ]
+    if STATUS_KEY_ORDER:
+        rows.append([ui["menu_status"]])
+    rows.extend(
+        [
+            [ui["menu_edit_replies"]],
+            [ui["menu_change_customer"], ui["menu_change_staff"]],
+            [ui["menu_clear"]],
+        ]
+    )
+    return rows
+
+
+def admin_reply_mgmt_menu_rows(staff_lang: str) -> list[list[str]]:
+    lang = normalize_staff_lang(staff_lang)
+    return [
+        [BTN_ADMIN_EDIT],
+        [BTN_ADMIN_ADD],
+        [BTN_ADMIN_DELETE],
+        [BTN_ADMIN_BACK, back_button(lang)],
     ]
 
 
-def edit_reply_key_menu_rows(staff_lang: str) -> list[list[str]]:
-    rows = [[EDIT_REPLY_KEY_LABELS[key]] for key in REPLY_KEY_ORDER]
-    rows.append([back_button(staff_lang)])
+def admin_category_menu_rows() -> list[list[str]]:
+    return [
+        [BTN_CAT_QUESTIONS],
+        [BTN_CAT_REPLIES],
+        [BTN_CAT_STATUS],
+    ]
+
+
+def admin_key_menu_rows(staff_lang: str) -> list[list[str]]:
+    rows = [[EDIT_REPLY_KEY_LABELS[key]] for key in sorted(get_quick_replies().keys())]
+    lang = normalize_staff_lang(staff_lang)
+    rows.append([BTN_ADMIN_BACK, back_button(lang)])
     return rows
+
+
+def parse_admin_category(text: str) -> str | None:
+    return LABEL_TO_ADMIN_CATEGORY.get(str(text or "").strip())
+
+
+def edit_reply_key_menu_rows(staff_lang: str) -> list[list[str]]:
+    return admin_key_menu_rows(staff_lang)
 
 
 def edit_lang_menu_rows() -> list[list[str]]:
@@ -511,6 +474,12 @@ def reply_menu_rows(staff_lang: str) -> list[list[str]]:
     return _rows_one_per_label(labels, lang)
 
 
+def status_menu_rows(staff_lang: str) -> list[list[str]]:
+    lang = normalize_staff_lang(staff_lang)
+    labels = [STATUS_BUTTONS[lang][key] for key in STATUS_KEY_ORDER]
+    return _rows_one_per_label(labels, lang)
+
+
 def parse_question_label(text: str) -> str | None:
     raw = str(text or "").strip()
     if raw in LABEL_TO_QUESTION_KEY:
@@ -531,9 +500,19 @@ def parse_reply_label(text: str) -> str | None:
     return None
 
 
+def parse_status_label(text: str) -> str | None:
+    raw = str(text or "").strip()
+    if raw in LABEL_TO_STATUS_KEY:
+        return LABEL_TO_STATUS_KEY[raw]
+    if raw.startswith("/"):
+        token = raw.split()[0].split("@")[0].lower()
+        return COMMAND_TO_STATUS_KEY.get(token)
+    return None
+
+
 def question_text(key: str, customer_lang: str) -> str:
     lang = normalize_customer_lang(customer_lang)
-    block = QUESTIONS.get(key, {})
+    block = get_quick_replies().get(key) or QUESTIONS.get(key, {})
     return block.get(lang, block.get("th", ""))
 
 

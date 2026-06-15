@@ -1,0 +1,136 @@
+{
+  "categories": {
+    "questions_to_customer": {
+      "key_order": [
+        "q_separate_wash",
+        "q_location",
+        "q_house_photo",
+        "q_send_location",
+        "q_delivery_time",
+        "q_pickup_time",
+        "q_payment",
+        "q_bag_photo",
+        "q_confirm_wash"
+      ],
+      "buttons": {
+        "km": {
+          "q_separate_wash": "❓ /បោករួមរឺបោកផ្សេង",
+          "q_location": "❓ /ទីតាំង",
+          "q_house_photo": "❓ /សូមផ្ញើរូបផ្ទះ",
+          "q_send_location": "❓ /សូមផ្ញើទីតាំង",
+          "q_delivery_time": "❓ /ឲ្យបុគ្គលិកដឹកអោយម៉ោងប៉ុន្មាន",
+          "q_pickup_time": "❓ /ឱ្យបុគ្គលិកទៅយកម៉ោងប៉ុន្មាន",
+          "q_payment": "❓ /បង់ប្រាក់",
+          "q_bag_photo": "❓ /សូមផ្ញើរូបកាបូប",
+          "q_confirm_wash": "❓ /បញ្ជាក់ការបោក"
+        },
+        "th": {
+          "q_separate_wash": "❓ /ซักรวมไหม",
+          "q_location": "❓ /โลเคชั่น",
+          "q_house_photo": "❓ /ส่งรูปบ้าน",
+          "q_send_location": "❓ /ส่งโลเคชั่น",
+          "q_delivery_time": "❓ /ส่งกี่โมง",
+          "q_pickup_time": "❓ /รับกี่โมง",
+          "q_payment": "❓ /ชำระเงิน",
+          "q_bag_photo": "❓ /ส่งรูปถุงผ้า",
+          "q_confirm_wash": "❓ /ยืนยันการซัก"
+        },
+        "id": {
+          "q_separate_wash": "❓ /campuratauterpisah",
+          "q_location": "❓ /lokasi",
+          "q_house_photo": "❓ /fotorumah",
+          "q_send_location": "❓ /kirimlokasi",
+          "q_delivery_time": "❓ /antarjamberapa",
+          "q_pickup_time": "❓ /jemputjamberapa",
+          "q_payment": "❓ /pembayaran",
+          "q_bag_photo": "❓ /fototas",
+          "q_confirm_wash": "❓ /konfirmasicuci"
+        }
+      }
+    },
+    "replies_to_customer": {
+      "key_order": [
+        "price",
+        "delivery_fee",
+        "opening_hours",
+        "processing_time",
+        "points",
+        "ironing",
+        "no_shoes",
+        "before_service",
+        "laundry_ready",
+        "staff_on_the_way_delivery",
+        "staff_on_the_way_pickup",
+        "ask_location",
+        "ask_home_photo",
+        "ask_bag_photo",
+        "payment_method",
+        "ask_separate_or_together"
+      ],
+      "buttons": {
+        "km": {
+          "price": "💰 /តម្លៃ",
+          "delivery_fee": "🚚 /ថ្លៃដឹក",
+          "opening_hours": "⏰ /ម៉ោងបើក",
+          "processing_time": "⏳ /រយៈពេល",
+          "points": "🎁 /ពិន្ទុ",
+          "ironing": "❌ /មិនមានអ៊ុត",
+          "no_shoes": "❌ /មិនមានស្បែកជើង",
+          "before_service": "⚠️ /មុនប្រើសេវា",
+          "laundry_ready": "📦 /រួចរាល់",
+          "staff_on_the_way_delivery": "🚚 /កំពុងទៅ",
+          "staff_on_the_way_pickup": "🛵 /កំពុងទៅយក",
+          "ask_location": "📍 /សូមផ្ញើទីតាំង",
+          "ask_home_photo": "🏠 /សូមផ្ញើរូបផ្ទះ",
+          "ask_bag_photo": "👜 /សូមផ្ញើរូបកាបូប",
+          "payment_method": "💳 /បង់ប្រាក់",
+          "ask_separate_or_together": "🧺 /បោករួមរឺបោកផ្សេង"
+        },
+        "th": {
+          "price": "💰 /ราคา",
+          "delivery_fee": "🚚 /ค่าส่ง",
+          "opening_hours": "⏰ /เวลาเปิด",
+          "processing_time": "⏳ /ระยะเวลา",
+          "points": "🎁 /แต้ม",
+          "ironing": "❌ /ไม่มีรีดผ้า",
+          "no_shoes": "❌ /ไม่มีซักรองเท้า",
+          "before_service": "⚠️ /ก่อนใช้บริการ",
+          "laundry_ready": "📦 /พร้อมแล้ว",
+          "staff_on_the_way_delivery": "🚚 /กำลังไปส่ง",
+          "staff_on_the_way_pickup": "🛵 /กำลังไปรับ",
+          "ask_location": "📍 /ส่งโลเคชั่น",
+          "ask_home_photo": "🏠 /ส่งรูปบ้าน",
+          "ask_bag_photo": "👜 /ส่งรูปถุงผ้า",
+          "payment_method": "💳 /ชำระเงิน",
+          "ask_separate_or_together": "🧺 /ซักแยกหรือรวม"
+        },
+        "id": {
+          "price": "💰 /harga",
+          "delivery_fee": "🚚 /ongkir",
+          "opening_hours": "⏰ /jambuka",
+          "processing_time": "⏳ /waktu",
+          "points": "🎁 /poin",
+          "ironing": "❌ /tidaksetrika",
+          "no_shoes": "❌ /tidakcucisepatu",
+          "before_service": "⚠️ /sebelumlayanan",
+          "laundry_ready": "📦 /sudahsiap",
+          "staff_on_the_way_delivery": "🚚 /sedangantar",
+          "staff_on_the_way_pickup": "🛵 /sedangjemput",
+          "ask_location": "📍 /kirimlokasi",
+          "ask_home_photo": "🏠 /fotorumah",
+          "ask_bag_photo": "👜 /fototas",
+          "payment_method": "💳 /pembayaran",
+          "ask_separate_or_together": "🧺 /campuratauterpisah"
+        }
+      }
+    },
+    "status_updates": {
+      "key_order": [],
+      "buttons": {
+        "km": {},
+        "th": {},
+        "id": {}
+      }
+    }
+  }
+}

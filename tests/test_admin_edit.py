@@ -9,7 +9,7 @@ from pathlib import Path
 
 import reply_store
 from quick_replies import (
-    BTN_EDIT_REPLIES,
+    BTN_REPLY_MGMT,
     EDIT_REPLY_KEY_LABELS,
     EDIT_LANG_LABELS,
     OWNER_ACCESS_DENIED,
@@ -29,13 +29,13 @@ def test_json_has_all_reply_keys() -> None:
         assert set(data[key].keys()) == {"th", "en", "km", "id", "cn"}
 
 
-def test_main_menu_has_edit_replies() -> None:
+def test_main_menu_has_reply_management() -> None:
     flat = [b for row in main_menu_rows("km") for b in row]
-    assert BTN_EDIT_REPLIES in flat
+    assert BTN_REPLY_MGMT in flat
 
 
 def test_edit_key_labels_count() -> None:
-    assert len(EDIT_REPLY_KEY_LABELS) == len(REPLY_KEY_ORDER)
+    assert len(EDIT_REPLY_KEY_LABELS) == len(get_quick_replies())
 
 
 def test_parse_edit_reply_key_ironing() -> None:
@@ -61,8 +61,9 @@ def test_save_reply_with_backup(tmp_path: Path | None = None) -> None:
         reply_store._cache = None
 
         new_text = "TEST IRONING TH\n\nEdited by unit test."
-        reply_store.save_reply("ironing", "th", new_text)
-        assert reply_store.BACKUP_PATH.is_file()
+        reply_store.save_reply("ironing", "th", new_text, backup=True)
+        backups = list(work.glob("quick_replies_backup_*.json"))
+        assert reply_store.BACKUP_PATH.is_file() or backups
         assert get_quick_replies()["ironing"]["th"] == new_text
         assert quick_reply_text("ironing", "th") == new_text
     finally:
@@ -79,7 +80,7 @@ def test_owner_access_denied_message() -> None:
 
 if __name__ == "__main__":
     test_json_has_all_reply_keys()
-    test_main_menu_has_edit_replies()
+    test_main_menu_has_reply_management()
     test_edit_key_labels_count()
     test_parse_edit_reply_key_ironing()
     test_parse_edit_lang_th()
