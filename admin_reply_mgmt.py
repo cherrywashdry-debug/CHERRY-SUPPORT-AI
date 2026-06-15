@@ -107,15 +107,6 @@ def admin_key_label(key: str) -> str:
 
 
 def confirm_keyboard(action: str) -> InlineKeyboardMarkup:
-    if action == "edit":
-        return InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton("✅ Confirm Edit", callback_data="admin:confirm_edit"),
-                    InlineKeyboardButton("❌ Cancel", callback_data="admin:cancel_edit"),
-                ]
-            ]
-        )
     if action == "add":
         return InlineKeyboardMarkup(
             [
@@ -150,7 +141,7 @@ async def send_reply_mgmt_menu(update: Update, context: ContextTypes.DEFAULT_TYP
 
     staff = get_staff_lang(context)
     await message.reply_text(
-        "🔧 Reply Management",
+        "🔧 Reply Management\n\nPlease choose an action:",
         reply_markup=keyboard(admin_reply_mgmt_menu_rows(staff)),
     )
 
@@ -169,9 +160,11 @@ async def send_admin_edit_keys_menu(update: Update, context: ContextTypes.DEFAUL
     from app import get_staff_lang, keyboard
 
     staff = get_staff_lang(context)
+    from quick_replies import edit_reply_key_menu_rows
+
     await message.reply_text(
         "✏️ Edit Reply\n\nSelect reply key:",
-        reply_markup=keyboard(admin_key_menu_rows(staff)),
+        reply_markup=keyboard(edit_reply_key_menu_rows(staff)),
     )
 
 
@@ -265,11 +258,7 @@ async def show_delete_confirmation(
     await message.reply_text(
         "⚠️ Confirm Delete Reply\n\n"
         f"Key: {reply_key}\n\n"
-        "This will remove:\n"
-        "• Reply text\n"
-        "• Staff button mapping\n"
-        "• Menu button\n\n"
-        "This action cannot be undone unless restored from backup.",
+        "This will remove this reply button and text from the bot.",
         reply_markup=confirm_keyboard("delete"),
     )
 
@@ -282,7 +271,7 @@ def _format_add_confirmation(draft: dict[str, Any]) -> str:
         f"Key: {draft.get('key', '')}",
         f"Category: {cat}",
         "",
-        "Staff Buttons:",
+        "Buttons:",
         f"KH: {draft.get('btn_km', '')}",
         f"TH: {draft.get('btn_th', '')}",
         f"ID: {draft.get('btn_id', '')}",
@@ -310,35 +299,6 @@ async def show_add_confirmation(update: Update, context: ContextTypes.DEFAULT_TY
     await message.reply_text(
         _format_add_confirmation(draft),
         reply_markup=confirm_keyboard("add"),
-    )
-
-
-async def show_edit_confirmation(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    reply_key: str,
-    lang: str,
-    old_text: str,
-    new_text: str,
-) -> None:
-    message = update.effective_message
-    if not message:
-        return
-    context.user_data[ADMIN_PENDING] = {
-        "action": "edit",
-        "key": reply_key,
-        "lang": lang,
-        "old_text": old_text,
-        "new_text": new_text,
-    }
-    context.user_data.pop(ADMIN_AWAITING, None)
-    await message.reply_text(
-        "⚠️ Confirm Edit Reply\n\n"
-        f"Key: {reply_key}\n"
-        f"Language: {edit_lang_display(lang)}\n\n"
-        f"Old text:\n{old_text}\n\n"
-        f"New text:\n{new_text}",
-        reply_markup=confirm_keyboard("edit"),
     )
 
 
@@ -379,8 +339,22 @@ async def handle_admin_text(
 
             await send_main_menu(update, context)
             return True
-        old_text = get_quick_replies()[reply_key][lang]
-        await show_edit_confirmation(update, context, reply_key, lang, old_text, raw)
+        try:
+            backup_replies_file()
+            save_reply(reply_key, lang, raw, backup=False)
+        except Exception as exc:
+            logger.exception("edit save failed")
+            await message.reply_text(f"Save failed: {exc}\nPrevious reply kept.")
+            return True
+        clear_admin_state(context)
+        await message.reply_text(
+            "✅ Reply updated successfully.\n"
+            f"Key: {reply_key}\n"
+            f"Language: {edit_lang_display(lang)}",
+        )
+        from app import send_main_menu
+
+        await send_main_menu(update, context)
         return True
 
     if awaiting == "add_key":
@@ -413,37 +387,31 @@ async def handle_admin_text(
         context.user_data[ADMIN_DRAFT] = draft
         context.user_data[ADMIN_AWAITING] = "add_btn_km"
         await message.reply_text(
-            "Send staff button label for Khmer.\nExample:\n🌸 /ក្លិនក្រអូប\n\nSend /cancel to cancel.",
+            "KH button label:\nExample:\n🌸 /ក្លិនក្រអូប\n\nSend /cancel to cancel.",
         )
         return True
 
-    btn_steps = (
-        ("add_btn_km", "add_btn_th", "Khmer", "Thai"),
-        ("add_btn_th", "add_btn_id", "Thai", "Indonesian"),
-        ("add_btn_id", "add_text_th", "Indonesian", None),
-    )
-    for step, nxt, _cur, nxt_lang in btn_steps:
+    btn_prompts = {
+        "add_btn_km": ("add_btn_th", "TH button label:\nExample:\n🌸 /น้ำหอม\n\nSend /cancel to cancel."),
+        "add_btn_th": ("add_btn_id", "ID button label:\nExample:\n🌸 /parfum\n\nSend /cancel to cancel."),
+        "add_btn_id": ("add_text_th", "Send TH reply text.\nSend /cancel to cancel."),
+    }
+    for step, (nxt, prompt) in btn_prompts.items():
         if awaiting == step:
             draft[step.replace("add_btn_", "btn_")] = raw
             context.user_data[ADMIN_DRAFT] = draft
-            if nxt == "add_text_th":
-                context.user_data[ADMIN_AWAITING] = "add_text_th"
-                await message.reply_text("Send TH reply text.\nSend /cancel to cancel.")
-            else:
-                context.user_data[ADMIN_AWAITING] = nxt
-                await message.reply_text(
-                    f"Send staff button label for {nxt_lang}.\nSend /cancel to cancel.",
-                )
+            context.user_data[ADMIN_AWAITING] = nxt
+            await message.reply_text(prompt)
             return True
 
     text_steps = (
-        ("add_text_th", "add_text_en", "TH", "EN"),
-        ("add_text_en", "add_text_km", "EN", "KH"),
-        ("add_text_km", "add_text_id", "KH", "ID"),
-        ("add_text_id", "add_text_cn", "ID", "CN"),
-        ("add_text_cn", None, "CN", None),
+        ("add_text_th", "add_text_en", "TH reply text"),
+        ("add_text_en", "add_text_km", "EN reply text"),
+        ("add_text_km", "add_text_id", "KH reply text"),
+        ("add_text_id", "add_text_cn", "ID reply text"),
+        ("add_text_cn", None, "CN reply text"),
     )
-    for step, nxt, _cur, _nxt in text_steps:
+    for step, nxt, label in text_steps:
         if awaiting != step:
             continue
         if step == "add_text_th":
@@ -458,9 +426,8 @@ async def handle_admin_text(
             await show_add_confirmation(update, context)
             return True
         context.user_data[ADMIN_AWAITING] = nxt
-        allow_skip = nxt != "add_text_th"
-        hint = f"Send {_nxt} reply text."
-        if allow_skip:
+        hint = f"Send {label}."
+        if step != "add_text_th":
             hint += "\nAllow /skip to save TODO."
         hint += "\nSend /cancel to cancel."
         await message.reply_text(hint)
@@ -554,36 +521,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     data = query.data
     from app import send_main_menu
 
-    if data == "admin:cancel_edit":
-        context.user_data.pop(ADMIN_PENDING, None)
-        clear_admin_state(context)
-        if query.message:
-            await query.message.reply_text("❌ Edit cancelled.")
-        await send_main_menu(update, context)
-        return
-
-    if data == "admin:confirm_edit":
-        if pending.get("action") != "edit":
-            return
-        key = str(pending.get("key", ""))
-        lang = str(pending.get("lang", ""))
-        new_text = str(pending.get("new_text", ""))
-        try:
-            backup_replies_file()
-            save_reply(key, lang, new_text, backup=False)
-            refresh_button_maps()
-        except Exception as exc:
-            logger.exception("confirm edit failed")
-            if query.message:
-                await query.message.reply_text(f"Save failed: {exc}\nPrevious reply kept.")
-            return
-        context.user_data.pop(ADMIN_PENDING, None)
-        clear_admin_state(context)
-        if query.message:
-            await query.message.reply_text("✅ Reply updated successfully.")
-        await send_main_menu(update, context)
-        return
-
     if data == "admin:cancel_add":
         context.user_data.pop(ADMIN_PENDING, None)
         clear_admin_state(context)
@@ -630,10 +567,8 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if data == "admin:cancel_delete":
         context.user_data.pop(ADMIN_PENDING, None)
-        clear_admin_state(context)
         if query.message:
             await query.message.reply_text("❌ Delete cancelled.")
-        await send_main_menu(update, context)
         return
 
     if data == "admin:confirm_delete":

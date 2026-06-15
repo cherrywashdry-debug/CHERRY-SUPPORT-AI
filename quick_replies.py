@@ -427,6 +427,17 @@ def admin_category_menu_rows() -> list[list[str]]:
     ]
 
 
+def edit_reply_key_menu_rows(staff_lang: str) -> list[list[str]]:
+    rows = [
+        [EDIT_REPLY_KEY_LABELS[key]]
+        for key in REPLY_KEY_ORDER
+        if key in EDIT_REPLY_KEY_LABELS
+    ]
+    lang = normalize_staff_lang(staff_lang)
+    rows.append([BTN_ADMIN_BACK, back_button(lang)])
+    return rows
+
+
 def admin_key_menu_rows(staff_lang: str) -> list[list[str]]:
     rows = [[EDIT_REPLY_KEY_LABELS[key]] for key in sorted(get_quick_replies().keys())]
     lang = normalize_staff_lang(staff_lang)
@@ -436,10 +447,6 @@ def admin_key_menu_rows(staff_lang: str) -> list[list[str]]:
 
 def parse_admin_category(text: str) -> str | None:
     return LABEL_TO_ADMIN_CATEGORY.get(str(text or "").strip())
-
-
-def edit_reply_key_menu_rows(staff_lang: str) -> list[list[str]]:
-    return admin_key_menu_rows(staff_lang)
 
 
 def edit_lang_menu_rows() -> list[list[str]]:
