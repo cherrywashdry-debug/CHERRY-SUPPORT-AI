@@ -68,7 +68,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - FIXED-V3.1"
+VERSION = "CHERRY QUICK REPLY - FIXED-V3.2"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
