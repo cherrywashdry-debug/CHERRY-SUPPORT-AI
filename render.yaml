@@ -1,19 +1,42 @@
-services:
-  - type: web
-    name: cherry-support-ai
-    env: python
-    plan: starter
-    buildCommand: pip install -r requirements.txt
-    startCommand: python3 app.py
-    healthCheckPath: /health
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.12.8
-      - key: TZ
-        value: Asia/Phnom_Penh
-      - key: WEBHOOK_URL
-        value: https://cherry-support-ai.onrender.com/telegram
-      - key: BOT_TOKEN
-        sync: false
-      - key: ALLOWED_USER_IDS
-        sync: false
+services:
+
+  - type: web
+
+    name: cherry-support-ai
+
+    env: python
+
+    plan: starter
+
+    buildCommand: pip install -r requirements.txt
+
+    startCommand: python3 app.py
+
+    healthCheckPath: /health
+
+    envVars:
+
+      - key: PYTHON_VERSION
+
+        value: 3.12.8
+
+      - key: TZ
+
+        value: Asia/Phnom_Penh
+
+      - key: WEBHOOK_URL
+
+        value: https://cherry-support-ai.onrender.com/telegram
+
+      - key: BOT_TOKEN
+
+        sync: false
+
+      - key: ALLOWED_USER_IDS
+
+        sync: false
+
+      - key: OWNER_TELEGRAM_ID
+
+        value: "5253532289"
+

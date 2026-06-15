@@ -23,15 +23,23 @@ from telegram.ext import (
 )
 
 from quick_replies import (
+    BTN_EDIT_REPLIES,
     CUSTOMER_LANG_LABELS,
     DEFAULT_CUSTOMER_LANG,
     DEFAULT_STAFF_LANG,
+    OWNER_ACCESS_DENIED,
     STAFF_LANG_LABELS,
     customer_lang_from_label,
+    edit_lang_display,
+    edit_lang_menu_rows,
+    edit_reply_key_menu_rows,
+    get_quick_replies,
     is_back_button,
     is_main_menu_label,
     main_menu_action,
     main_menu_rows,
+    parse_edit_lang,
+    parse_edit_reply_key,
     parse_question_label,
     parse_reply_label,
     question_menu_rows,
@@ -41,6 +49,7 @@ from quick_replies import (
     staff_lang_from_label,
     staff_ui,
 )
+from reply_store import save_reply
 
 load_dotenv()
 
@@ -50,7 +59,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - FIXED-V2.5"
+VERSION = "CHERRY QUICK REPLY - FIXED-V2.6"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -63,6 +72,12 @@ ACTIVE_SCREEN_KEY = "active_screen"  # main | questions | replies
 SCREEN_MAIN = "main"
 SCREEN_QUESTIONS = "questions"
 SCREEN_REPLIES = "replies"
+SCREEN_EDIT_KEYS = "edit_keys"
+SCREEN_EDIT_LANG = "edit_lang"
+
+EDIT_AWAITING_KEY = "edit_awaiting"
+EDIT_KEY_KEY = "edit_reply_key"
+EDIT_LANG_KEY = "edit_reply_lang"
 
 
 def parse_allowed_user_ids(raw: str) -> frozenset[int]:
@@ -80,6 +95,22 @@ def parse_allowed_user_ids(raw: str) -> frozenset[int]:
 
 def allowed_user_ids() -> frozenset[int]:
     return parse_allowed_user_ids(os.getenv("ALLOWED_USER_IDS", ""))
+
+
+def owner_telegram_id() -> int | None:
+    raw = os.getenv("OWNER_TELEGRAM_ID", "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def is_owner(update: Update) -> bool:
+    oid = owner_telegram_id()
+    user = update.effective_user
+    return oid is not None and user is not None and user.id == oid
 
 
 def is_staff_user(update: Update) -> bool:
@@ -145,8 +176,22 @@ def clear_session(context: ContextTypes.DEFAULT_TYPE) -> None:
         STAFF_LANG_SET_KEY,
         CUSTOMER_LANG_SET_KEY,
         ACTIVE_SCREEN_KEY,
+        EDIT_AWAITING_KEY,
+        EDIT_KEY_KEY,
+        EDIT_LANG_KEY,
     ):
         context.user_data.pop(key, None)
+
+
+def clear_edit_state(context: ContextTypes.DEFAULT_TYPE) -> bool:
+    had = any(
+        context.user_data.pop(key, None) is not None
+        for key in (EDIT_AWAITING_KEY, EDIT_KEY_KEY, EDIT_LANG_KEY)
+    )
+    if get_active_screen(context) in (SCREEN_EDIT_KEYS, SCREEN_EDIT_LANG):
+        context.user_data.pop(ACTIVE_SCREEN_KEY, None)
+        had = True
+    return had
 
 
 def keyboard(rows: list[list[str]], *, resize: bool = True) -> ReplyKeyboardMarkup:
@@ -262,6 +307,61 @@ async def send_replies_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
 
 
+async def send_edit_keys_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    if not message:
+        return
+    if not is_owner(update):
+        await message.reply_text(OWNER_ACCESS_DENIED)
+        return
+    context.user_data.pop(EDIT_AWAITING_KEY, None)
+    context.user_data.pop(EDIT_KEY_KEY, None)
+    context.user_data.pop(EDIT_LANG_KEY, None)
+    set_active_screen(context, SCREEN_EDIT_KEYS)
+    staff = get_staff_lang(context)
+    await message.reply_text(
+        "🔧 Edit Replies\n\nSelect reply key:",
+        reply_markup=keyboard(edit_reply_key_menu_rows(staff)),
+    )
+
+
+async def send_edit_lang_menu(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    reply_key: str,
+) -> None:
+    message = update.effective_message
+    if not message:
+        return
+    context.user_data[EDIT_KEY_KEY] = reply_key
+    context.user_data.pop(EDIT_AWAITING_KEY, None)
+    context.user_data.pop(EDIT_LANG_KEY, None)
+    set_active_screen(context, SCREEN_EDIT_LANG)
+    await message.reply_text(
+        "Please choose language to edit:",
+        reply_markup=keyboard(edit_lang_menu_rows()),
+    )
+
+
+async def prompt_edit_reply_text(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    reply_key: str,
+    lang: str,
+) -> None:
+    message = update.effective_message
+    if not message:
+        return
+    context.user_data[EDIT_KEY_KEY] = reply_key
+    context.user_data[EDIT_LANG_KEY] = lang
+    context.user_data[EDIT_AWAITING_KEY] = True
+    current = get_quick_replies()[reply_key][lang]
+    await message.reply_text(
+        f"Current text:\n\n{current}\n\nSend new reply text now.\nSend /cancel to cancel.",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
 async def ensure_ready_for_main(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -288,6 +388,20 @@ async def apply_customer_lang(
             staff_ui(staff, "customer_lang_set").format(name=customer_lang_name(code)),
         )
     await send_main_menu(update, context)
+
+
+async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await deny_if_not_staff(update):
+        return
+    message = update.effective_message
+    if not clear_edit_state(context):
+        if message:
+            await message.reply_text("Nothing to cancel.")
+        return
+    if message:
+        await message.reply_text("Edit cancelled.")
+    if await ensure_ready_for_main(update, context):
+        await send_main_menu(update, context)
 
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -370,6 +484,9 @@ async def handle_main_menu_choice(
     if action == "clear":
         await clear_cmd(update, context)
         return True
+    if action == "edit_replies":
+        await send_edit_keys_menu(update, context)
+        return True
     return False
 
 
@@ -407,11 +524,54 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not await ensure_ready_for_main(update, context):
         return
 
+    if context.user_data.get(EDIT_AWAITING_KEY):
+        if not is_owner(update):
+            clear_edit_state(context)
+            await message.reply_text(OWNER_ACCESS_DENIED)
+            await send_main_menu(update, context)
+            return
+        reply_key = str(context.user_data.get(EDIT_KEY_KEY, ""))
+        reply_lang = str(context.user_data.get(EDIT_LANG_KEY, ""))
+        try:
+            save_reply(reply_key, reply_lang, raw)
+        except Exception as exc:
+            logger.exception("reply save failed")
+            await message.reply_text(f"Save failed: {exc}\nPrevious reply kept.")
+            return
+        clear_edit_state(context)
+        await message.reply_text(
+            "✅ Reply updated successfully.\n"
+            f"Key: {reply_key}\n"
+            f"Language: {edit_lang_display(reply_lang)}",
+        )
+        await send_main_menu(update, context)
+        return
+
     if is_back_button(raw):
         await send_main_menu(update, context)
         return
 
     screen = get_active_screen(context)
+
+    if screen == SCREEN_EDIT_KEYS:
+        if raw == BTN_EDIT_REPLIES:
+            await send_edit_keys_menu(update, context)
+            return
+        edit_key = parse_edit_reply_key(raw)
+        if edit_key:
+            await send_edit_lang_menu(update, context, edit_key)
+            return
+        await send_edit_keys_menu(update, context)
+        return
+
+    if screen == SCREEN_EDIT_LANG:
+        edit_lang = parse_edit_lang(raw)
+        reply_key = str(context.user_data.get(EDIT_KEY_KEY, ""))
+        if edit_lang and reply_key in get_quick_replies():
+            await prompt_edit_reply_text(update, context, reply_key, edit_lang)
+            return
+        await send_edit_lang_menu(update, context, reply_key)
+        return
 
     if screen == SCREEN_MAIN or is_main_menu_label(raw):
         if is_main_menu_label(raw):
@@ -532,6 +692,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("customer", customer_cmd))
     app.add_handler(CommandHandler("menu", menu_cmd))
     app.add_handler(CommandHandler("clear", clear_cmd))
+    app.add_handler(CommandHandler("cancel", cancel_cmd))
     app.add_handler(CommandHandler("health", health_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.COMMAND, handle_text))

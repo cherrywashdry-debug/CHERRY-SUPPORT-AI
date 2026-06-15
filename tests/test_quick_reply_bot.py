@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from quick_replies import (
     APPROVED_REPLY_BUTTONS,
-    QUICK_REPLIES,
     REPLY_KEY_ORDER,
+    get_quick_replies,
     parse_reply_label,
     question_text,
     quick_reply_text,
@@ -106,9 +106,10 @@ def test_question_khmer_customer() -> None:
 
 
 def test_all_reply_keys_in_quick_replies() -> None:
+    data = get_quick_replies()
     for key in REPLY_KEY_ORDER:
-        assert key in QUICK_REPLIES
-        assert set(QUICK_REPLIES[key].keys()) == {"th", "en", "km", "id", "cn"}
+        assert key in data
+        assert set(data[key].keys()) == {"th", "en", "km", "id", "cn"}
 
 
 if __name__ == "__main__":

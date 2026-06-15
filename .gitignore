@@ -5,3 +5,7 @@ __pycache__/
 !.env.example
 .venv/
 venv/
+quick_replies.json
+quick_replies_backup.json
+data/quick_replies.json
+test_report.txt

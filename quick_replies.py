@@ -1,7 +1,7 @@
 """Fixed quick replies for CHERRY Quick Reply Bot — edit approved text here only."""
 from __future__ import annotations
 
-from reply_customer_texts import REPLY_CN, REPLY_ID, REPLY_KM
+from reply_store import load_replies
 
 STAFF_LANGS = frozenset({"km", "th", "id"})
 CUSTOMER_LANGS = frozenset({"th", "en", "km", "id", "cn"})
@@ -36,6 +36,7 @@ STAFF_UI: dict[str, dict[str, str]] = {
         "menu_change_customer": "🌐 ប្តូរភាសាអតិថិជន",
         "menu_change_staff": "👩‍💼 ប្តូរភាសាបុគ្គលិក",
         "menu_clear": "🧹 លុប Session",
+        "menu_edit_replies": "🔧 Edit Replies",
         "back": "ត្រឡប់",
         "prompt_start": "🍒 CHERRY QUICK REPLY\n\nសូមជ្រើសរើសភាសាបុគ្គលិក:",
         "prompt_customer": "ភាសាបុគ្គលិក: {staff}\n\nសូមជ្រើសរើសភាសាអតិថិជន:",
@@ -51,6 +52,7 @@ STAFF_UI: dict[str, dict[str, str]] = {
         "menu_change_customer": "🌐 เปลี่ยนภาษาลูกค้า",
         "menu_change_staff": "👩‍💼 เปลี่ยนภาษาพนักงาน",
         "menu_clear": "🧹 ล้าง Session",
+        "menu_edit_replies": "🔧 Edit Replies",
         "back": "กลับ",
         "prompt_start": "🍒 CHERRY QUICK REPLY\n\nกรุณาเลือกภาษาพนักงาน:",
         "prompt_customer": "ภาษาพนักงาน: {staff}\n\nกรุณาเลือกภาษาลูกค้า:",
@@ -66,6 +68,7 @@ STAFF_UI: dict[str, dict[str, str]] = {
         "menu_change_customer": "🌐 Ganti Bahasa Pelanggan",
         "menu_change_staff": "👩‍💼 Ganti Bahasa Staff",
         "menu_clear": "🧹 Hapus Session",
+        "menu_edit_replies": "🔧 Edit Replies",
         "back": "Kembali",
         "prompt_start": "🍒 CHERRY QUICK REPLY\n\nPilih bahasa staff:",
         "prompt_customer": "Bahasa staff: {staff}\n\nPilih bahasa pelanggan:",
@@ -83,6 +86,40 @@ BTN_MENU_REPLIES = STAFF_UI["km"]["menu_replies"]
 BTN_MENU_CHANGE_CUSTOMER = STAFF_UI["km"]["menu_change_customer"]
 BTN_MENU_CHANGE_STAFF = STAFF_UI["km"]["menu_change_staff"]
 BTN_MENU_CLEAR = STAFF_UI["km"]["menu_clear"]
+BTN_EDIT_REPLIES = STAFF_UI["km"]["menu_edit_replies"]
+
+# Owner edit — reply key picker (emoji + key name)
+EDIT_REPLY_KEY_LABELS: dict[str, str] = {
+    "price": f"{EMOJI_MONEY} price",
+    "delivery_fee": f"{EMOJI_TRUCK} delivery_fee",
+    "opening_hours": f"{EMOJI_CLOCK} opening_hours",
+    "processing_time": f"{EMOJI_HOURGLASS} processing_time",
+    "points": f"{EMOJI_GIFT} points",
+    "ironing": f"{EMOJI_CROSS} ironing",
+    "no_shoes": f"{EMOJI_CROSS} no_shoes",
+    "before_service": f"{EMOJI_WARN} before_service",
+    "laundry_ready": f"{EMOJI_PACKAGE} laundry_ready",
+    "staff_on_the_way_delivery": f"{EMOJI_TRUCK} staff_on_the_way_delivery",
+    "staff_on_the_way_pickup": f"{EMOJI_SCOOTER} staff_on_the_way_pickup",
+    "ask_location": f"{EMOJI_PIN} ask_location",
+    "ask_home_photo": f"{EMOJI_HOUSE} ask_home_photo",
+    "ask_bag_photo": f"{EMOJI_BAG} ask_bag_photo",
+    "payment_method": f"{EMOJI_CARD} payment_method",
+    "ask_separate_or_together": f"{EMOJI_BASKET} ask_separate_or_together",
+}
+
+EDIT_LANG_LABELS: dict[str, str] = {
+    "th": "🇹🇭 TH",
+    "en": "🇬🇧 EN",
+    "km": "🇰🇭 KH",
+    "id": "🇮🇩 ID",
+    "cn": "🇨🇳 CN",
+}
+
+LABEL_TO_EDIT_KEY: dict[str, str] = {label: key for key, label in EDIT_REPLY_KEY_LABELS.items()}
+LABEL_TO_EDIT_LANG: dict[str, str] = {label: code for code, label in EDIT_LANG_LABELS.items()}
+
+OWNER_ACCESS_DENIED = "⛔ Access denied.\nThis menu is for owner only."
 
 # ── Staff / customer language pickers ─────────────────────────────────────────
 STAFF_LANG_LABELS: dict[str, str] = {
@@ -242,10 +279,6 @@ def _customer_langs(
     return {"th": th, "en": en, "km": km, "id": id_, "cn": cn}
 
 
-def _reply_block(key: str, th: str, en: str) -> dict[str, str]:
-    return _customer_langs(th, en, REPLY_KM[key], REPLY_ID[key], REPLY_CN[key])
-
-
 QUESTIONS: dict[str, dict[str, str]] = {
     "q_separate_wash": _customer_langs(
         th="ลูกค้าซักแยกหรือซักรวมคะ? ช่วยแจ้งให้ทราบด้วยนะคะ",
@@ -312,315 +345,16 @@ QUESTIONS: dict[str, dict[str, str]] = {
     ),
 }
 
-# ── Approved reply texts by KEY (edit here only) ──────────────────────────────
-_REPLY_PRICE_TH = (
-    "💰 ราคา\n\n"
-    "CHERRY WASH & DRY POIPET 24HR\n\n"
-    "🧺 เครื่องเล็ก (14 KG) ราคา 210–240 บาท\n"
-    "🧺 เครื่องใหญ่ (18 KG) ราคา 270–300 บาท\n\n"
-    "⚠️ คิดราคาต่อเครื่อง\n"
-    "❌ ไม่คิดราคาตามกิโลกรัม\n\n"
-    "ขอบคุณที่สอบถาม CHERRY Wash & Dry ❤️"
-)
+# ── Reply texts loaded from quick_replies.json (see reply_store.py) ───────────
+def get_quick_replies() -> dict[str, dict[str, str]]:
+    return load_replies()
 
-_REPLY_DELIVERY_FEE_TH = (
-    "🚚 ค่าส่ง\n\n"
-    "🆓 ไม่เกิน 1 กิโลเมตร ฟรี\n"
-    "💵 1–2.5 กิโลเมตร 10 บาท\n"
-    "💵 2.5–3 กิโลเมตร 20 บาท\n"
-    "💵 มากกว่า 3 กิโลเมตร 50 บาท\n"
-    "💵 มากกว่า 4 กิโลเมตร 70 บาท\n\n"
-    "ขอบคุณที่สอบถาม CHERRY Wash & Dry ❤️"
-)
 
-_REPLY_OPENING_HOURS_TH = (
-    "⏰ เวลาเปิด\n\n"
-    "CHERRY Wash & Dry เปิดบริการ 24 ชั่วโมง\n\n"
-    "🚚 รับ-ส่งผ้า\n"
-    "เวลา 09:30 – 00:00 น.\n\n"
-    "ขอบคุณที่สอบถาม CHERRY Wash & Dry ❤️"
-)
+def reload_quick_replies() -> dict[str, dict[str, str]]:
+    from reply_store import reload_replies
 
-_REPLY_PROCESSING_TIME_TH = (
-    "⏳ ระยะเวลาดำเนินการ\n\n"
-    "🚚 รับ-ส่งผ้า\n"
-    "โดยปกติใช้เวลาประมาณ 3–4 ชั่วโมง\n"
-    "เริ่มนับเวลาหลังจาก\n"
-    "✅ รับผ้าเรียบร้อย\n"
-    "✅ ตรวจสอบรายการเรียบร้อย\n"
-    "✅ ออกบิลเรียบร้อย\n\n"
-    "🏪 ลูกค้า Walk-in\n"
-    "โดยปกติใช้เวลาประมาณ 2–3 ชั่วโมง\n\n"
-    "ขอบคุณที่สอบถาม CHERRY Wash & Dry ❤️"
-)
+    return reload_replies()
 
-_REPLY_POINTS_TH = (
-    "🎁 สะสมแต้ม\n\n"
-    "🧺 ทุกการใช้บริการที่มียอดตั้งแต่ 240 บาทขึ้นไป\n"
-    "ได้รับ 1 แต้ม ต่อ 1 เครื่อง\n\n"
-    "🎁 สะสมครบ 13 แต้ม\n"
-    "รับเครดิตส่วนลด 200 บาท สำหรับการใช้บริการครั้งถัดไป\n\n"
-    "ขอบคุณที่ใช้บริการ CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_IRONING_TH = (
-    "❌ ไม่มีบริการรีดผ้า\n\n"
-    "ขออภัยค่ะ\n"
-    "ปัจจุบัน CHERRY Wash & Dry ให้บริการเฉพาะ\n"
-    "🧺 ซัก\n"
-    "🌬️ อบ\n"
-    "📦 พับ\n"
-    "🚚 รับ-ส่งถึงบ้าน\n\n"
-    "ทางร้านยังไม่มีบริการรีดผ้าค่ะ\n\n"
-    "ขอบคุณที่สอบถาม CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_NO_SHOES_TH = (
-    "❌ ไม่มีบริการซักรองเท้า\n\n"
-    "ขออภัยค่ะ\n"
-    "ปัจจุบัน CHERRY Wash & Dry ให้บริการเฉพาะ\n"
-    "🧺 ซัก\n"
-    "🌬️ อบ\n"
-    "📦 พับ\n"
-    "🚚 รับ-ส่งถึงบ้าน\n\n"
-    "ทางร้านยังไม่มีบริการซักรองเท้าค่ะ\n\n"
-    "ขอบคุณที่สอบถาม CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_BEFORE_SERVICE_TH = (
-    "⚠️ ข้อควรทราบก่อนใช้บริการ\n\n"
-    "CHERRY Wash & Dry ให้บริการซักและอบด้วยเครื่องซักผ้าอุตสาหกรรม\n\n"
-    "🧺 ลูกค้า 1 ออเดอร์ = 1 เครื่อง\n"
-    "❌ ทางร้านไม่ซักรวมกับผ้าของลูกค้าท่านอื่น\n\n"
-    "หากลูกค้าต้องการแยกซักผ้าขาว ผ้าสี หรือผ้าประเภทพิเศษ "
-    "กรุณาแจ้งพนักงานล่วงหน้าก่อนเริ่มซัก\n\n"
-    "🧦 ถุงเท้า\n"
-    "🩲 กางเกงใน\n"
-    "👶 เสื้อผ้าเด็ก\n"
-    "หรือเสื้อผ้าชิ้นเล็ก\n"
-    "แนะนำให้ใส่ถุงซักก่อนส่งซัก\n\n"
-    "เสื้อผ้าบางชนิดอาจเกิดการหด ย้วย สีซีด สีตก หรือเกิดความเสียหายได้"
-    "ตามสภาพเนื้อผ้า อายุการใช้งาน และคุณภาพของวัสดุเดิม\n\n"
-    "หากมีเสื้อผ้าพิเศษ เสื้อผ้าราคาแพง หรือผ้าบอบบาง "
-    "กรุณาแจ้งพนักงานก่อนส่งซัก\n\n"
-    "ขอบคุณที่สอบถาม CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_PRICE_EN = (
-    "💰 Price\n\n"
-    "CHERRY WASH & DRY POIPET 24HR\n\n"
-    "🧺 Small machine (14 KG) 210–240 THB\n"
-    "🧺 Large machine (18 KG) 270–300 THB\n\n"
-    "⚠️ Priced per machine\n"
-    "❌ Not priced per kilogram\n\n"
-    "Thank you for asking CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_DELIVERY_FEE_EN = (
-    "🚚 Delivery Fee\n\n"
-    "🆓 Within 1 km — free\n"
-    "💵 1–2.5 km — 10 THB\n"
-    "💵 2.5–3 km — 20 THB\n"
-    "💵 Over 3 km — 50 THB\n"
-    "💵 Over 4 km — 70 THB\n\n"
-    "Thank you for asking CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_OPENING_HOURS_EN = (
-    "⏰ Opening Hours\n\n"
-    "CHERRY Wash & Dry is open 24 hours\n\n"
-    "🚚 Pickup & delivery\n"
-    "09:30 – 00:00\n\n"
-    "Thank you for asking CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_PROCESSING_TIME_EN = (
-    "⏳ Processing Time\n\n"
-    "🚚 Pickup & delivery\n"
-    "Usually about 3–4 hours\n"
-    "Timing starts after:\n"
-    "✅ Laundry received\n"
-    "✅ Items checked\n"
-    "✅ Invoice issued\n\n"
-    "🏪 Walk-in customers\n"
-    "Usually about 2–3 hours\n\n"
-    "Thank you for asking CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_POINTS_EN = (
-    "🎁 Reward Points\n\n"
-    "🧺 Every service of 240 THB or more\n"
-    "earns 1 point per machine\n\n"
-    "🎁 Collect 13 points\n"
-    "Get 200 THB credit for your next visit\n\n"
-    "Thank you for using CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_IRONING_EN = (
-    "❌ No ironing service\n\n"
-    "Sorry,\n"
-    "CHERRY Wash & Dry currently offers:\n"
-    "🧺 Wash\n"
-    "🌬️ Dry\n"
-    "📦 Fold\n"
-    "🚚 Home pickup & delivery\n\n"
-    "We do not offer ironing at this time.\n\n"
-    "Thank you for asking CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_NO_SHOES_EN = (
-    "❌ No shoe washing service\n\n"
-    "Sorry,\n"
-    "CHERRY Wash & Dry currently offers:\n"
-    "🧺 Wash\n"
-    "🌬️ Dry\n"
-    "📦 Fold\n"
-    "🚚 Home pickup & delivery\n\n"
-    "We do not offer shoe washing at this time.\n\n"
-    "Thank you for asking CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_BEFORE_SERVICE_EN = (
-    "⚠️ Before using our service\n\n"
-    "CHERRY Wash & Dry uses industrial washing machines.\n\n"
-    "🧺 1 order = 1 machine\n"
-    "❌ We never mix your laundry with other customers\n\n"
-    "If you need separate loads for whites, colors, or special items, "
-    "please tell staff before washing starts.\n\n"
-    "🧦 Socks\n"
-    "🩲 Underwear\n"
-    "👶 Baby clothes\n"
-    "or small items — use a laundry bag before sending.\n\n"
-    "Some fabrics may shrink, stretch, fade, or bleed depending on "
-    "material, age, and quality.\n\n"
-    "For delicate, expensive, or special items, please inform staff "
-    "before washing.\n\n"
-    "Thank you for asking CHERRY Wash & Dry ❤️"
-)
-
-# Reply Pack V2
-_REPLY_LAUNDRY_READY_TH = (
-    "📦 ผ้าของลูกค้าพร้อมแล้วค่ะ\n\n"
-    "ลูกค้าสามารถเข้ามารับที่ร้าน หรือแจ้งให้ทางร้านจัดส่งกลับได้ค่ะ\n\n"
-    "ขอบคุณที่ใช้บริการ CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_STAFF_ON_THE_WAY_DELIVERY_TH = (
-    "🚚 พนักงานกำลังนำผ้าไปส่งให้ลูกค้าค่ะ\n\n"
-    "กรุณารอสักครู่ และเตรียมรับผ้าตามโลเคชั่นที่แจ้งไว้ค่ะ\n\n"
-    "ขอบคุณที่ไว้วางใจ CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_STAFF_ON_THE_WAY_PICKUP_TH = (
-    "🛵 พนักงานกำลังไปรับผ้าของลูกค้าค่ะ\n\n"
-    "กรุณารอสักครู่ และเตรียมถุงผ้าไว้ที่จุดรับผ้าที่แจ้งไว้ค่ะ\n\n"
-    "ขอบคุณที่ไว้วางใจ CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_ASK_LOCATION_TH = (
-    "📍 กรุณาส่งโลเคชั่นให้ทางร้านด้วยนะคะ\n\n"
-    "เพื่อให้พนักงานสามารถตรวจสอบระยะทาง คำนวณค่าส่ง "
-    "และเดินทางไปได้ถูกต้องค่ะ ❤️"
-)
-
-_REPLY_ASK_HOME_PHOTO_TH = (
-    "🏠 กรุณาส่งรูปหน้าบ้าน หรือจุดรับผ้าให้ชัดเจนด้วยนะคะ\n\n"
-    "เพื่อให้พนักงานสามารถหาสถานที่รับผ้าได้ง่ายและถูกต้องค่ะ ❤️"
-)
-
-_REPLY_ASK_BAG_PHOTO_TH = (
-    "👜 กรุณาส่งรูปถุงผ้า หรือกระเป๋าผ้าที่ต้องการให้พนักงานไปรับด้วยนะคะ\n\n"
-    "เพื่อให้พนักงานสามารถตรวจสอบและรับผ้าได้ถูกต้องค่ะ ❤️"
-)
-
-_REPLY_PAYMENT_METHOD_TH = (
-    "💳 ลูกค้าต้องการชำระเงินช่องทางไหนคะ?\n\n"
-    "สามารถแจ้งช่องทางที่สะดวกให้ทางร้านทราบได้เลยค่ะ ❤️"
-)
-
-_REPLY_ASK_SEPARATE_OR_TOGETHER_TH = (
-    "🧺 ลูกค้าต้องการซักแยก หรือซักรวมกันคะ?\n\n"
-    "หากต้องการแยกซักผ้าขาว ผ้าสี หรือผ้าประเภทพิเศษ "
-    "กรุณาแจ้งให้ทางร้านทราบล่วงหน้าด้วยนะคะ ❤️"
-)
-
-_REPLY_LAUNDRY_READY_EN = (
-    "📦 Your laundry is ready\n\n"
-    "You may pick up at the shop or ask us to deliver it back.\n\n"
-    "Thank you for using CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_STAFF_ON_THE_WAY_DELIVERY_EN = (
-    "🚚 Our staff is on the way to deliver your laundry\n\n"
-    "Please wait a moment and be ready to receive it at the location you shared.\n\n"
-    "Thank you for trusting CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_STAFF_ON_THE_WAY_PICKUP_EN = (
-    "🛵 Our staff is on the way to pick up your laundry\n\n"
-    "Please wait a moment and have the laundry bag ready at the pickup point you shared.\n\n"
-    "Thank you for trusting CHERRY Wash & Dry ❤️"
-)
-
-_REPLY_ASK_LOCATION_EN = (
-    "📍 Please send your location to us\n\n"
-    "So our staff can check the distance, calculate the delivery fee, "
-    "and navigate correctly ❤️"
-)
-
-_REPLY_ASK_HOME_PHOTO_EN = (
-    "🏠 Please send a clear photo of your house or pickup point\n\n"
-    "So our staff can find the location easily and correctly ❤️"
-)
-
-_REPLY_ASK_BAG_PHOTO_EN = (
-    "👜 Please send a photo of the laundry bag you want us to pick up\n\n"
-    "So our staff can verify and collect it correctly ❤️"
-)
-
-_REPLY_PAYMENT_METHOD_EN = (
-    "💳 How would you like to pay?\n\n"
-    "Please tell us your preferred payment method ❤️"
-)
-
-_REPLY_ASK_SEPARATE_OR_TOGETHER_EN = (
-    "🧺 Would you like separate wash or combined wash?\n\n"
-    "If you need separate loads for whites, colors, or special items, "
-    "please let us know in advance ❤️"
-)
-
-QUICK_REPLIES: dict[str, dict[str, str]] = {
-    "price": _reply_block("price", _REPLY_PRICE_TH, _REPLY_PRICE_EN),
-    "delivery_fee": _reply_block("delivery_fee", _REPLY_DELIVERY_FEE_TH, _REPLY_DELIVERY_FEE_EN),
-    "opening_hours": _reply_block("opening_hours", _REPLY_OPENING_HOURS_TH, _REPLY_OPENING_HOURS_EN),
-    "processing_time": _reply_block(
-        "processing_time", _REPLY_PROCESSING_TIME_TH, _REPLY_PROCESSING_TIME_EN
-    ),
-    "points": _reply_block("points", _REPLY_POINTS_TH, _REPLY_POINTS_EN),
-    "ironing": _reply_block("ironing", _REPLY_IRONING_TH, _REPLY_IRONING_EN),
-    "no_shoes": _reply_block("no_shoes", _REPLY_NO_SHOES_TH, _REPLY_NO_SHOES_EN),
-    "before_service": _reply_block("before_service", _REPLY_BEFORE_SERVICE_TH, _REPLY_BEFORE_SERVICE_EN),
-    "laundry_ready": _reply_block("laundry_ready", _REPLY_LAUNDRY_READY_TH, _REPLY_LAUNDRY_READY_EN),
-    "staff_on_the_way_delivery": _reply_block(
-        "staff_on_the_way_delivery",
-        _REPLY_STAFF_ON_THE_WAY_DELIVERY_TH,
-        _REPLY_STAFF_ON_THE_WAY_DELIVERY_EN,
-    ),
-    "staff_on_the_way_pickup": _reply_block(
-        "staff_on_the_way_pickup",
-        _REPLY_STAFF_ON_THE_WAY_PICKUP_TH,
-        _REPLY_STAFF_ON_THE_WAY_PICKUP_EN,
-    ),
-    "ask_location": _reply_block("ask_location", _REPLY_ASK_LOCATION_TH, _REPLY_ASK_LOCATION_EN),
-    "ask_home_photo": _reply_block("ask_home_photo", _REPLY_ASK_HOME_PHOTO_TH, _REPLY_ASK_HOME_PHOTO_EN),
-    "ask_bag_photo": _reply_block("ask_bag_photo", _REPLY_ASK_BAG_PHOTO_TH, _REPLY_ASK_BAG_PHOTO_EN),
-    "payment_method": _reply_block("payment_method", _REPLY_PAYMENT_METHOD_TH, _REPLY_PAYMENT_METHOD_EN),
-    "ask_separate_or_together": _reply_block(
-        "ask_separate_or_together",
-        _REPLY_ASK_SEPARATE_OR_TOGETHER_TH,
-        _REPLY_ASK_SEPARATE_OR_TOGETHER_EN,
-    ),
-}
 
 # ── Lookups ───────────────────────────────────────────────────────────────────
 LABEL_TO_QUESTION_KEY: dict[str, str] = {}
@@ -660,6 +394,8 @@ def back_button(staff_lang: str) -> str:
 
 def main_menu_action(text: str) -> str | None:
     raw = str(text or "").strip()
+    if raw == BTN_EDIT_REPLIES:
+        return "edit_replies"
     action_keys = (
         "menu_questions",
         "menu_replies",
@@ -731,9 +467,36 @@ def main_menu_rows(staff_lang: str) -> list[list[str]]:
     return [
         [ui["menu_questions"]],
         [ui["menu_replies"]],
+        [ui["menu_edit_replies"]],
         [ui["menu_change_customer"], ui["menu_change_staff"]],
         [ui["menu_clear"]],
     ]
+
+
+def edit_reply_key_menu_rows(staff_lang: str) -> list[list[str]]:
+    rows = [[EDIT_REPLY_KEY_LABELS[key]] for key in REPLY_KEY_ORDER]
+    rows.append([back_button(staff_lang)])
+    return rows
+
+
+def edit_lang_menu_rows() -> list[list[str]]:
+    return [
+        [EDIT_LANG_LABELS["th"], EDIT_LANG_LABELS["en"]],
+        [EDIT_LANG_LABELS["km"], EDIT_LANG_LABELS["id"]],
+        [EDIT_LANG_LABELS["cn"]],
+    ]
+
+
+def parse_edit_reply_key(text: str) -> str | None:
+    return LABEL_TO_EDIT_KEY.get(str(text or "").strip())
+
+
+def parse_edit_lang(text: str) -> str | None:
+    return LABEL_TO_EDIT_LANG.get(str(text or "").strip())
+
+
+def edit_lang_display(code: str) -> str:
+    return EDIT_LANG_LABELS.get(normalize_customer_lang(code), code)
 
 
 def question_menu_rows(staff_lang: str) -> list[list[str]]:
@@ -776,5 +539,5 @@ def question_text(key: str, customer_lang: str) -> str:
 
 def quick_reply_text(key: str, customer_lang: str) -> str:
     lang = normalize_customer_lang(customer_lang)
-    block = QUICK_REPLIES.get(key, {})
+    block = get_quick_replies().get(key, {})
     return block.get(lang, block.get("th", ""))

@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 
 
-COPY app.py quick_replies.py reply_customer_texts.py ./
+COPY app.py quick_replies.py reply_store.py reply_defaults.py quick_replies_seed.json ./
 
 RUN mkdir -p data
 
