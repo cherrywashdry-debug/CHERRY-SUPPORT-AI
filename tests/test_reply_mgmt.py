@@ -123,7 +123,7 @@ def test_owner_access_denied_message() -> None:
 def test_main_menu_reply_management_label() -> None:
     from quick_replies import main_menu_rows
 
-    flat = [b for row in main_menu_rows("km") for b in row]
+    flat = [b for row in main_menu_rows("km", show_reply_management=True) for b in row]
     assert BTN_REPLY_MGMT == "🔧 Reply Management"
     assert BTN_REPLY_MGMT in flat
 

@@ -30,7 +30,7 @@ def test_json_has_all_reply_keys() -> None:
 
 
 def test_main_menu_has_reply_management() -> None:
-    flat = [b for row in main_menu_rows("km") for b in row]
+    flat = [b for row in main_menu_rows("km", show_reply_management=True) for b in row]
     assert BTN_REPLY_MGMT in flat
 
 

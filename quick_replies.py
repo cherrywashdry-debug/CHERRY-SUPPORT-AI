@@ -37,7 +37,6 @@ STAFF_UI: dict[str, dict[str, str]] = {
         "menu_change_customer": "🌐 ប្តូរភាសាអតិថិជន",
         "menu_change_staff": "👩‍💼 ប្តូរភាសាបុគ្គលិក",
         "menu_clear": "🧹 លុប Session",
-        "menu_edit_replies": "🔧 Reply Management",
         "menu_status": f"{EMOJI_TRUCK} Status Updates",
         "back": "ត្រឡប់",
         "prompt_start": "🍒 CHERRY QUICK REPLY\n\nសូមជ្រើសរើសភាសាបុគ្គលិក:",
@@ -54,7 +53,6 @@ STAFF_UI: dict[str, dict[str, str]] = {
         "menu_change_customer": "🌐 เปลี่ยนภาษาลูกค้า",
         "menu_change_staff": "👩‍💼 เปลี่ยนภาษาพนักงาน",
         "menu_clear": "🧹 ล้าง Session",
-        "menu_edit_replies": "🔧 Reply Management",
         "menu_status": f"{EMOJI_TRUCK} Status Updates",
         "back": "กลับ",
         "prompt_start": "🍒 CHERRY QUICK REPLY\n\nกรุณาเลือกภาษาพนักงาน:",
@@ -71,7 +69,6 @@ STAFF_UI: dict[str, dict[str, str]] = {
         "menu_change_customer": "🌐 Ganti Bahasa Pelanggan",
         "menu_change_staff": "👩‍💼 Ganti Bahasa Staff",
         "menu_clear": "🧹 Hapus Session",
-        "menu_edit_replies": "🔧 Reply Management",
         "menu_status": f"{EMOJI_TRUCK} Status Updates",
         "back": "Kembali",
         "prompt_start": "🍒 CHERRY QUICK REPLY\n\nPilih bahasa staff:",
@@ -90,8 +87,9 @@ BTN_MENU_REPLIES = STAFF_UI["km"]["menu_replies"]
 BTN_MENU_CHANGE_CUSTOMER = STAFF_UI["km"]["menu_change_customer"]
 BTN_MENU_CHANGE_STAFF = STAFF_UI["km"]["menu_change_staff"]
 BTN_MENU_CLEAR = STAFF_UI["km"]["menu_clear"]
-BTN_EDIT_REPLIES = STAFF_UI["km"]["menu_edit_replies"]
-BTN_REPLY_MGMT = BTN_EDIT_REPLIES
+BTN_REPLY_MGMT = "🔧 Reply Management"
+BTN_EDIT_REPLIES_LEGACY = "🔧 Edit Replies"  # legacy cached keyboard label
+BTN_EDIT_REPLIES = BTN_REPLY_MGMT
 
 BTN_ADMIN_EDIT = "✏️ Edit Reply"
 BTN_ADMIN_ADD = "➕ Add Reply"
@@ -321,7 +319,7 @@ def back_button(staff_lang: str) -> str:
 
 def main_menu_action(text: str) -> str | None:
     raw = str(text or "").strip()
-    if raw == BTN_REPLY_MGMT:
+    if raw in (BTN_REPLY_MGMT, BTN_EDIT_REPLIES_LEGACY):
         return "reply_management"
     action_keys = (
         "menu_questions",
@@ -390,7 +388,7 @@ def _rows_one_per_label(labels: list[str], staff_lang: str) -> list[list[str]]:
     return rows
 
 
-def main_menu_rows(staff_lang: str) -> list[list[str]]:
+def main_menu_rows(staff_lang: str, *, show_reply_management: bool = False) -> list[list[str]]:
     lang = normalize_staff_lang(staff_lang)
     ui = STAFF_UI[lang]
     rows = [
@@ -399,9 +397,10 @@ def main_menu_rows(staff_lang: str) -> list[list[str]]:
     ]
     if STATUS_KEY_ORDER:
         rows.append([ui["menu_status"]])
+    if show_reply_management:
+        rows.append([BTN_REPLY_MGMT])
     rows.extend(
         [
-            [ui["menu_edit_replies"]],
             [ui["menu_change_customer"], ui["menu_change_staff"]],
             [ui["menu_clear"]],
         ]

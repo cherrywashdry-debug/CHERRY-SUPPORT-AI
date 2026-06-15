@@ -67,7 +67,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - FIXED-V2.9"
+VERSION = "CHERRY QUICK REPLY - FIXED-V3.0"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -247,7 +247,7 @@ async def send_access_gate(update: Update) -> None:
 
 
 def build_main_menu_keyboard(staff_lang: str, *, is_owner_user: bool) -> ReplyKeyboardMarkup:
-    rows = list(main_menu_rows(staff_lang))
+    rows = list(main_menu_rows(staff_lang, show_reply_management=is_owner_user))
     if is_owner_user:
         rows.insert(-1, [BTN_STAFF_MGMT])
     return keyboard(rows)
