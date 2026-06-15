@@ -18,6 +18,13 @@ EMOJI_TRUCK = "\U0001F69A"  # 🚚
 EMOJI_CLOCK = "\U000023F0"  # ⏰
 EMOJI_HOURGLASS = "\U000023F3"  # ⏳
 EMOJI_GIFT = "\U0001F381"  # 🎁
+EMOJI_PACKAGE = "\U0001F4E6"  # 📦
+EMOJI_SCOOTER = "\U0001F6F5"  # 🛵
+EMOJI_PIN = "\U0001F4CD"  # 📍
+EMOJI_HOUSE = "\U0001F3E0"  # 🏠
+EMOJI_BAG = "\U0001F45C"  # 👜
+EMOJI_CARD = "\U0001F4B3"  # 💳
+EMOJI_BASKET = "\U0001F9FA"  # 🧺
 
 # ── Staff UI labels (main menu, back, prompts) ────────────────────────────────
 STAFF_UI: dict[str, dict[str, str]] = {
@@ -122,6 +129,15 @@ APPROVED_REPLY_BUTTONS: dict[str, str] = {
     "ironing": f"{EMOJI_CROSS} /មិនមានអ៊ុត",
     "no_shoes": f"{EMOJI_CROSS} /មិនមានស្បែកជើង",
     "before_service": f"{EMOJI_WARN} /មុនប្រើសេវា",
+    # Reply Pack V2
+    "laundry_ready": f"{EMOJI_PACKAGE} /រួចរាល់",
+    "staff_on_the_way_delivery": f"{EMOJI_TRUCK} /កំពុងទៅ",
+    "staff_on_the_way_pickup": f"{EMOJI_SCOOTER} /កំពុងទៅយក",
+    "ask_location": f"{EMOJI_PIN} /សូមផ្ញើទីតាំង",
+    "ask_home_photo": f"{EMOJI_HOUSE} /សូមផ្ញើរូបផ្ទះ",
+    "ask_bag_photo": f"{EMOJI_BAG} /សូមផ្ញើរូបកាបូប",
+    "payment_method": f"{EMOJI_CARD} /បង់ប្រាក់",
+    "ask_separate_or_together": f"{EMOJI_BASKET} /បោករួមរឺបោកផ្សេង",
 }
 
 REPLY_KEY_ORDER: list[str] = [
@@ -133,6 +149,15 @@ REPLY_KEY_ORDER: list[str] = [
     "ironing",
     "no_shoes",
     "before_service",
+    # Reply Pack V2
+    "laundry_ready",
+    "staff_on_the_way_delivery",
+    "staff_on_the_way_pickup",
+    "ask_location",
+    "ask_home_photo",
+    "ask_bag_photo",
+    "payment_method",
+    "ask_separate_or_together",
 ]
 
 QUESTION_BUTTONS: dict[str, dict[str, str]] = {
@@ -172,6 +197,14 @@ REPLY_BUTTONS: dict[str, dict[str, str]] = {
         "ironing": f"{EMOJI_CROSS} /ไม่มีรีดผ้า",
         "no_shoes": f"{EMOJI_CROSS} /ไม่มีซักรองเท้า",
         "before_service": f"{EMOJI_WARN} /ก่อนใช้บริการ",
+        "laundry_ready": f"{EMOJI_PACKAGE} /พร้อมแล้ว",
+        "staff_on_the_way_delivery": f"{EMOJI_TRUCK} /กำลังไปส่ง",
+        "staff_on_the_way_pickup": f"{EMOJI_SCOOTER} /กำลังไปรับ",
+        "ask_location": f"{EMOJI_PIN} /ส่งโลเคชั่น",
+        "ask_home_photo": f"{EMOJI_HOUSE} /ส่งรูปบ้าน",
+        "ask_bag_photo": f"{EMOJI_BAG} /ส่งรูปถุงผ้า",
+        "payment_method": f"{EMOJI_CARD} /ชำระเงิน",
+        "ask_separate_or_together": f"{EMOJI_BASKET} /ซักแยกหรือรวม",
     },
     "id": {
         "price": f"{EMOJI_MONEY} /harga",
@@ -182,6 +215,14 @@ REPLY_BUTTONS: dict[str, dict[str, str]] = {
         "ironing": f"{EMOJI_CROSS} /tidaksetrika",
         "no_shoes": f"{EMOJI_CROSS} /tidakcucisepatu",
         "before_service": f"{EMOJI_WARN} /sebelumlayanan",
+        "laundry_ready": f"{EMOJI_PACKAGE} /sudahsiap",
+        "staff_on_the_way_delivery": f"{EMOJI_TRUCK} /sedangantar",
+        "staff_on_the_way_pickup": f"{EMOJI_SCOOTER} /sedangjemput",
+        "ask_location": f"{EMOJI_PIN} /kirimlokasi",
+        "ask_home_photo": f"{EMOJI_HOUSE} /fotorumah",
+        "ask_bag_photo": f"{EMOJI_BAG} /fototas",
+        "payment_method": f"{EMOJI_CARD} /pembayaran",
+        "ask_separate_or_together": f"{EMOJI_BASKET} /campuratauterpisah",
     },
 }
 
@@ -352,6 +393,52 @@ _REPLY_BEFORE_SERVICE_TH = (
     "ขอบคุณที่สอบถาม CHERRY Wash & Dry ❤️"
 )
 
+# Reply Pack V2
+_REPLY_LAUNDRY_READY_TH = (
+    "📦 ผ้าของลูกค้าพร้อมแล้วค่ะ\n\n"
+    "ลูกค้าสามารถเข้ามารับที่ร้าน หรือแจ้งให้ทางร้านจัดส่งกลับได้ค่ะ\n\n"
+    "ขอบคุณที่ใช้บริการ CHERRY Wash & Dry ❤️"
+)
+
+_REPLY_STAFF_ON_THE_WAY_DELIVERY_TH = (
+    "🚚 พนักงานกำลังนำผ้าไปส่งให้ลูกค้าค่ะ\n\n"
+    "กรุณารอสักครู่ และเตรียมรับผ้าตามโลเคชั่นที่แจ้งไว้ค่ะ\n\n"
+    "ขอบคุณที่ไว้วางใจ CHERRY Wash & Dry ❤️"
+)
+
+_REPLY_STAFF_ON_THE_WAY_PICKUP_TH = (
+    "🛵 พนักงานกำลังไปรับผ้าของลูกค้าค่ะ\n\n"
+    "กรุณารอสักครู่ และเตรียมถุงผ้าไว้ที่จุดรับผ้าที่แจ้งไว้ค่ะ\n\n"
+    "ขอบคุณที่ไว้วางใจ CHERRY Wash & Dry ❤️"
+)
+
+_REPLY_ASK_LOCATION_TH = (
+    "📍 กรุณาส่งโลเคชั่นให้ทางร้านด้วยนะคะ\n\n"
+    "เพื่อให้พนักงานสามารถตรวจสอบระยะทาง คำนวณค่าส่ง "
+    "และเดินทางไปได้ถูกต้องค่ะ ❤️"
+)
+
+_REPLY_ASK_HOME_PHOTO_TH = (
+    "🏠 กรุณาส่งรูปหน้าบ้าน หรือจุดรับผ้าให้ชัดเจนด้วยนะคะ\n\n"
+    "เพื่อให้พนักงานสามารถหาสถานที่รับผ้าได้ง่ายและถูกต้องค่ะ ❤️"
+)
+
+_REPLY_ASK_BAG_PHOTO_TH = (
+    "👜 กรุณาส่งรูปถุงผ้า หรือกระเป๋าผ้าที่ต้องการให้พนักงานไปรับด้วยนะคะ\n\n"
+    "เพื่อให้พนักงานสามารถตรวจสอบและรับผ้าได้ถูกต้องค่ะ ❤️"
+)
+
+_REPLY_PAYMENT_METHOD_TH = (
+    "💳 ลูกค้าต้องการชำระเงินช่องทางไหนคะ?\n\n"
+    "สามารถแจ้งช่องทางที่สะดวกให้ทางร้านทราบได้เลยค่ะ ❤️"
+)
+
+_REPLY_ASK_SEPARATE_OR_TOGETHER_TH = (
+    "🧺 ลูกค้าต้องการซักแยก หรือซักรวมกันคะ?\n\n"
+    "หากต้องการแยกซักผ้าขาว ผ้าสี หรือผ้าประเภทพิเศษ "
+    "กรุณาแจ้งให้ทางร้านทราบล่วงหน้าด้วยนะคะ ❤️"
+)
+
 QUICK_REPLIES: dict[str, dict[str, str]] = {
     "price": _todo_reply_langs(_REPLY_PRICE_TH),
     "delivery_fee": _todo_reply_langs(_REPLY_DELIVERY_FEE_TH),
@@ -361,6 +448,14 @@ QUICK_REPLIES: dict[str, dict[str, str]] = {
     "ironing": _todo_reply_langs(_REPLY_IRONING_TH),
     "no_shoes": _todo_reply_langs(_REPLY_NO_SHOES_TH),
     "before_service": _todo_reply_langs(_REPLY_BEFORE_SERVICE_TH),
+    "laundry_ready": _todo_reply_langs(_REPLY_LAUNDRY_READY_TH),
+    "staff_on_the_way_delivery": _todo_reply_langs(_REPLY_STAFF_ON_THE_WAY_DELIVERY_TH),
+    "staff_on_the_way_pickup": _todo_reply_langs(_REPLY_STAFF_ON_THE_WAY_PICKUP_TH),
+    "ask_location": _todo_reply_langs(_REPLY_ASK_LOCATION_TH),
+    "ask_home_photo": _todo_reply_langs(_REPLY_ASK_HOME_PHOTO_TH),
+    "ask_bag_photo": _todo_reply_langs(_REPLY_ASK_BAG_PHOTO_TH),
+    "payment_method": _todo_reply_langs(_REPLY_PAYMENT_METHOD_TH),
+    "ask_separate_or_together": _todo_reply_langs(_REPLY_ASK_SEPARATE_OR_TOGETHER_TH),
 }
 
 # ── Lookups ───────────────────────────────────────────────────────────────────
