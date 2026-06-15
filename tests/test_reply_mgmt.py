@@ -7,16 +7,20 @@ import tempfile
 from pathlib import Path
 
 import reply_button_store
+import reply_button_store
 import reply_store
 from admin_reply_mgmt import validate_new_key
 from quick_replies import (
     BTN_ADMIN_ADD,
     BTN_ADMIN_DELETE,
     BTN_ADMIN_EDIT,
+    BTN_ADMIN_EDIT_BUTTON,
+    BTN_ADMIN_SET_IMAGE,
     BTN_REPLY_MGMT,
     OWNER_ACCESS_DENIED,
     admin_reply_mgmt_menu_rows,
     get_quick_replies,
+    refresh_button_maps,
     refresh_button_maps,
     reload_quick_replies,
 )
@@ -55,8 +59,33 @@ def _restore_stores() -> None:
 def test_reply_mgmt_menu_buttons() -> None:
     flat = [b for row in admin_reply_mgmt_menu_rows("km") for b in row]
     assert BTN_ADMIN_EDIT in flat
+    assert BTN_ADMIN_EDIT_BUTTON in flat
+    assert BTN_ADMIN_SET_IMAGE in flat
     assert BTN_ADMIN_ADD in flat
     assert BTN_ADMIN_DELETE in flat
+
+
+def test_update_button_label(tmp_work: Path | None = None) -> None:
+    work = Path(tempfile.mkdtemp())
+    try:
+        root = Path(reply_button_store.ROOT)
+        shutil.copy2(root / "quick_reply_buttons_seed.json", work / "quick_reply_buttons_seed.json")
+        shutil.copy2(work / "quick_reply_buttons_seed.json", work / "quick_reply_buttons.json")
+        reply_button_store.JSON_PATH = work / "quick_reply_buttons.json"
+        reply_button_store.SEED_PATH = work / "quick_reply_buttons_seed.json"
+        reply_button_store._cache = None
+        refresh_button_maps()
+        reply_button_store.update_button_label("delivery_fee", "th", "🚚 /ค่าจัดส่ง", backup=False)
+        refresh_button_maps()
+        from reply_button_store import button_label
+
+        assert button_label("delivery_fee", "th") == "🚚 /ค่าจัดส่ง"
+    finally:
+        reply_button_store._cache = None
+        reply_button_store.JSON_PATH = root / "quick_reply_buttons.json"
+        reply_button_store.SEED_PATH = root / "quick_reply_buttons_seed.json"
+        refresh_button_maps()
+        shutil.rmtree(work, ignore_errors=True)
 
 
 def test_validate_new_key_rules() -> None:
@@ -130,6 +159,7 @@ def test_main_menu_reply_management_label() -> None:
 
 if __name__ == "__main__":
     test_reply_mgmt_menu_buttons()
+    test_update_button_label()
     test_validate_new_key_rules()
     test_add_and_delete_reply_roundtrip()
     test_timestamped_reply_backup()

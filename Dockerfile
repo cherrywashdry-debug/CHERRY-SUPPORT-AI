@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY *.py ./
 
-COPY quick_replies_seed.json quick_reply_buttons_seed.json staff_users_seed.json ./
+COPY quick_replies_seed.json quick_reply_buttons_seed.json quick_reply_images_seed.json staff_users_seed.json ./
 
 RUN mkdir -p data
 

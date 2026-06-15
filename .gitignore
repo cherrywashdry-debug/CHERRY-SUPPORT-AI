@@ -10,6 +10,8 @@ quick_replies_backup.json
 quick_replies_backup_*.json
 quick_reply_buttons.json
 quick_reply_buttons_backup_*.json
+quick_reply_images.json
+quick_reply_images_backup_*.json
 staff_users.json
 staff_users_backup.json
 data/quick_replies.json

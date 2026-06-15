@@ -42,18 +42,21 @@ from quick_replies import (
     question_menu_rows,
     question_text,
     quick_reply_text,
+    quick_reply_image_file_id,
     reply_menu_rows,
     staff_lang_from_label,
     staff_ui,
     status_menu_rows,
 )
 from admin_reply_mgmt import (
+    ADMIN_SCREENS,
     SCREEN_ADMIN_DELETE_KEYS,
     SCREEN_ADMIN_EDIT_KEYS,
     SCREEN_ADMIN_EDIT_LANG,
     SCREEN_REPLY_MGMT,
     admin_callback,
     clear_admin_state,
+    handle_admin_photo,
     handle_admin_text,
     handle_reply_mgmt_screen,
     send_reply_mgmt_menu,
@@ -68,7 +71,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - FIXED-V3.2"
+VERSION = "CHERRY QUICK REPLY - FIXED-V3.3"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -345,6 +348,28 @@ async def send_main_menu(
         customer,
         getattr(update.effective_user, "id", None),
     )
+
+
+async def send_customer_quick_reply(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    key: str,
+    reply_markup: ReplyKeyboardMarkup,
+) -> None:
+    message = update.effective_message
+    if not message:
+        return
+    customer = get_customer_lang(context)
+    text = quick_reply_text(key, customer)
+    file_id = quick_reply_image_file_id(key, customer)
+    if file_id:
+        if len(text) <= 1024:
+            await message.reply_photo(file_id, caption=text, reply_markup=reply_markup)
+        else:
+            await message.reply_photo(file_id, reply_markup=reply_markup)
+            await message.reply_text(text, reply_markup=reply_markup)
+        return
+    await message.reply_text(text, reply_markup=reply_markup)
 
 
 async def send_questions_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -722,12 +747,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if is_back_button(raw):
         clear_admin_state(context)
         screen = get_active_screen(context)
-        if screen in (
-            SCREEN_REPLY_MGMT,
-            SCREEN_ADMIN_EDIT_KEYS,
-            SCREEN_ADMIN_EDIT_LANG,
-            SCREEN_ADMIN_DELETE_KEYS,
-        ):
+        if screen in ADMIN_SCREENS:
             if await handle_reply_mgmt_screen(update, context, raw):
                 return
         if screen in (SCREEN_STAFF_MGMT, SCREEN_REMOVE_STAFF):
@@ -739,12 +759,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     screen = get_active_screen(context)
 
-    if screen in (
-        SCREEN_REPLY_MGMT,
-        SCREEN_ADMIN_EDIT_KEYS,
-        SCREEN_ADMIN_EDIT_LANG,
-        SCREEN_ADMIN_DELETE_KEYS,
-    ):
+    if screen in ADMIN_SCREENS:
         if await handle_reply_mgmt_screen(update, context, raw):
             return
         if not is_owner(update):
@@ -808,10 +823,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         if not r_key:
             await send_replies_menu(update, context)
             return
-        answer = quick_reply_text(r_key, get_customer_lang(context))
-        await message.reply_text(
-            answer,
-            reply_markup=keyboard(reply_menu_rows(get_staff_lang(context))),
+        await send_customer_quick_reply(
+            update,
+            context,
+            r_key,
+            keyboard(reply_menu_rows(get_staff_lang(context))),
         )
         return
 
@@ -820,10 +836,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         if not s_key:
             await send_status_menu(update, context)
             return
-        answer = quick_reply_text(s_key, get_customer_lang(context))
-        await message.reply_text(
-            answer,
-            reply_markup=keyboard(status_menu_rows(get_staff_lang(context))),
+        await send_customer_quick_reply(
+            update,
+            context,
+            s_key,
+            keyboard(status_menu_rows(get_staff_lang(context))),
         )
         return
 
@@ -897,6 +914,13 @@ def build_persistence() -> PicklePersistence:
     return PicklePersistence(filepath=str(STATE_PATH))
 
 
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await deny_if_not_staff(update):
+        return
+    if await handle_admin_photo(update, context):
+        return
+
+
 def build_app() -> Application:
     token = os.getenv("BOT_TOKEN", "").strip()
     if not token:
@@ -920,6 +944,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("health", health_cmd))
     app.add_handler(CallbackQueryHandler(staff_access_callback, pattern=r"^staff:(approve|reject):\d+$"))
     app.add_handler(CallbackQueryHandler(admin_callback, pattern=r"^admin:"))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.COMMAND, handle_text))
     return app

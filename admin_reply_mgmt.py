@@ -13,20 +13,27 @@ from quick_replies import (
     BTN_ADMIN_BACK,
     BTN_ADMIN_DELETE,
     BTN_ADMIN_EDIT,
+    BTN_ADMIN_EDIT_BUTTON,
+    BTN_ADMIN_SET_IMAGE,
     BTN_EDIT_REPLIES_LEGACY,
     BTN_REPLY_MGMT,
     EDIT_LANG_LABELS,
+    EDIT_STAFF_LANG_LABELS,
     OWNER_ACCESS_DENIED,
+    admin_button_key_menu_rows,
     admin_category_menu_rows,
     admin_key_menu_rows,
     admin_reply_mgmt_menu_rows,
     back_button,
     edit_lang_display,
     edit_lang_menu_rows,
+    edit_staff_lang_menu_rows,
     get_quick_replies,
+    parse_admin_button_key,
     parse_admin_category,
     parse_edit_lang,
     parse_edit_reply_key,
+    parse_edit_staff_lang,
     refresh_button_maps,
     reload_quick_replies,
 )
@@ -34,9 +41,12 @@ from reply_button_store import (
     CATEGORIES,
     add_button_mapping,
     all_managed_keys,
+    button_label,
     key_category,
     remove_button_mapping,
+    update_button_label,
 )
+from reply_image_store import backup_images_file, remove_image, save_image
 from reply_store import TODO_TEXT, add_reply, backup_replies_file, delete_reply, save_reply
 
 logger = logging.getLogger("cherry.quick_reply.admin")
@@ -50,6 +60,21 @@ SCREEN_REPLY_MGMT = "reply_mgmt"
 SCREEN_ADMIN_EDIT_KEYS = "admin_edit_keys"
 SCREEN_ADMIN_EDIT_LANG = "admin_edit_lang"
 SCREEN_ADMIN_DELETE_KEYS = "admin_delete_keys"
+SCREEN_ADMIN_EDIT_BUTTON_KEYS = "admin_edit_button_keys"
+SCREEN_ADMIN_EDIT_BUTTON_LANG = "admin_edit_button_lang"
+SCREEN_ADMIN_IMAGE_KEYS = "admin_image_keys"
+SCREEN_ADMIN_IMAGE_LANG = "admin_image_lang"
+
+ADMIN_SCREENS = (
+    SCREEN_REPLY_MGMT,
+    SCREEN_ADMIN_EDIT_KEYS,
+    SCREEN_ADMIN_EDIT_LANG,
+    SCREEN_ADMIN_DELETE_KEYS,
+    SCREEN_ADMIN_EDIT_BUTTON_KEYS,
+    SCREEN_ADMIN_EDIT_BUTTON_LANG,
+    SCREEN_ADMIN_IMAGE_KEYS,
+    SCREEN_ADMIN_IMAGE_LANG,
+)
 
 KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -67,12 +92,7 @@ def clear_admin_state(context: ContextTypes.DEFAULT_TYPE) -> bool:
         for key in (ADMIN_MODE, ADMIN_AWAITING, ADMIN_DRAFT, ADMIN_PENDING)
     )
     screen = str(context.user_data.get("active_screen", ""))
-    if screen in (
-        SCREEN_REPLY_MGMT,
-        SCREEN_ADMIN_EDIT_KEYS,
-        SCREEN_ADMIN_EDIT_LANG,
-        SCREEN_ADMIN_DELETE_KEYS,
-    ):
+    if screen in ADMIN_SCREENS:
         context.user_data.pop("active_screen", None)
         had = True
     return had
@@ -145,6 +165,172 @@ async def send_reply_mgmt_menu(update: Update, context: ContextTypes.DEFAULT_TYP
         "🔧 Reply Management\n\nPlease choose an action:",
         reply_markup=keyboard(admin_reply_mgmt_menu_rows(staff)),
     )
+
+
+async def send_admin_edit_button_keys_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    if not message or not _owner_only(update):
+        if message:
+            await message.reply_text(OWNER_ACCESS_DENIED)
+        return
+    context.user_data[ADMIN_MODE] = "edit_button"
+    context.user_data.pop(ADMIN_AWAITING, None)
+    context.user_data.pop(ADMIN_DRAFT, None)
+    _set_screen(context, SCREEN_ADMIN_EDIT_BUTTON_KEYS)
+    from app import get_staff_lang, keyboard
+
+    staff = get_staff_lang(context)
+    await message.reply_text(
+        "🏷️ Edit Button\n\nSelect button key:",
+        reply_markup=keyboard(admin_button_key_menu_rows(staff)),
+    )
+
+
+async def send_admin_edit_button_lang_menu(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    reply_key: str,
+) -> None:
+    message = update.effective_message
+    if not message:
+        return
+    context.user_data[ADMIN_DRAFT] = {"key": reply_key}
+    context.user_data.pop(ADMIN_AWAITING, None)
+    _set_screen(context, SCREEN_ADMIN_EDIT_BUTTON_LANG)
+    from app import keyboard
+
+    await message.reply_text(
+        "Choose staff language for this button label:",
+        reply_markup=keyboard(edit_staff_lang_menu_rows()),
+    )
+
+
+async def prompt_admin_edit_button_label(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    reply_key: str,
+    staff_lang: str,
+) -> None:
+    message = update.effective_message
+    if not message:
+        return
+    draft = dict(context.user_data.get(ADMIN_DRAFT) or {})
+    draft.update({"key": reply_key, "staff_lang": staff_lang})
+    context.user_data[ADMIN_DRAFT] = draft
+    context.user_data[ADMIN_AWAITING] = "edit_button_text"
+    current = button_label(reply_key, staff_lang) or "(none)"
+    await message.reply_text(
+        f"Current button label ({staff_lang}):\n\n{current}\n\n"
+        "Send new button label now.\nExample: 🚚 /ค่าจัดส่ง\nSend /cancel to cancel.",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
+async def send_admin_image_keys_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    if not message or not _owner_only(update):
+        if message:
+            await message.reply_text(OWNER_ACCESS_DENIED)
+        return
+    context.user_data[ADMIN_MODE] = "set_image"
+    context.user_data.pop(ADMIN_AWAITING, None)
+    context.user_data.pop(ADMIN_DRAFT, None)
+    _set_screen(context, SCREEN_ADMIN_IMAGE_KEYS)
+    from app import get_staff_lang, keyboard
+    from quick_replies import edit_reply_key_menu_rows
+
+    staff = get_staff_lang(context)
+    await message.reply_text(
+        "🖼️ Set Reply Image\n\nSelect reply key:",
+        reply_markup=keyboard(edit_reply_key_menu_rows(staff)),
+    )
+
+
+async def send_admin_image_lang_menu(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    reply_key: str,
+) -> None:
+    message = update.effective_message
+    if not message:
+        return
+    from reply_image_store import get_image_file_id
+    from app import keyboard
+
+    context.user_data[ADMIN_DRAFT] = {"key": reply_key}
+    context.user_data.pop(ADMIN_AWAITING, None)
+    _set_screen(context, SCREEN_ADMIN_IMAGE_LANG)
+    has_image = any(get_image_file_id(reply_key, lang) for lang in EDIT_LANG_LABELS)
+    status = "Image is set for at least one language." if has_image else "No image set yet."
+    await message.reply_text(
+        f"🖼️ Set Reply Image\nKey: {reply_key}\n\n{status}\n\n"
+        "Please choose customer language:",
+        reply_markup=keyboard(edit_lang_menu_rows()),
+    )
+
+
+async def prompt_admin_image_upload(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    reply_key: str,
+    lang: str,
+) -> None:
+    message = update.effective_message
+    if not message:
+        return
+    from reply_image_store import get_image_file_id
+
+    draft = dict(context.user_data.get(ADMIN_DRAFT) or {})
+    draft.update({"key": reply_key, "lang": lang})
+    context.user_data[ADMIN_DRAFT] = draft
+    context.user_data[ADMIN_AWAITING] = "image_wait_photo"
+    current = get_image_file_id(reply_key, lang)
+    if current:
+        note = "Current: image saved.\nSend a new photo to replace.\nSend /remove to clear image."
+    else:
+        note = "No image for this language.\nSend photo now."
+    await message.reply_text(
+        f"{note}\nSend /cancel to cancel.",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
+async def handle_admin_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    if not _owner_only(update):
+        return False
+    if context.user_data.get(ADMIN_AWAITING) != "image_wait_photo":
+        return False
+    message = update.effective_message
+    if not message or not message.photo:
+        return False
+
+    draft = dict(context.user_data.get(ADMIN_DRAFT) or {})
+    reply_key = str(draft.get("key", ""))
+    lang = str(draft.get("lang", ""))
+    if reply_key not in get_quick_replies() or lang not in EDIT_LANG_LABELS:
+        clear_admin_state(context)
+        return True
+
+    photo = message.photo[-1]
+    file_id = str(photo.file_id)
+    try:
+        backup_images_file()
+        save_image(reply_key, lang, file_id, backup=False)
+    except Exception as exc:
+        logger.exception("save image failed")
+        await message.reply_text(f"Save failed: {exc}")
+        return True
+
+    clear_admin_state(context)
+    await message.reply_text(
+        "✅ Reply image saved.\n"
+        f"Key: {reply_key}\n"
+        f"Language: {edit_lang_display(lang)}",
+    )
+    from app import send_main_menu
+
+    await send_main_menu(update, context)
+    return True
 
 
 async def send_admin_edit_keys_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -358,6 +544,52 @@ async def handle_admin_text(
         await send_main_menu(update, context)
         return True
 
+    if awaiting == "edit_button_text":
+        reply_key = str(draft.get("key", ""))
+        staff_lang = str(draft.get("staff_lang", ""))
+        if not key_category(reply_key) or staff_lang not in EDIT_STAFF_LANG_LABELS:
+            clear_admin_state(context)
+            from app import send_main_menu
+
+            await send_main_menu(update, context)
+            return True
+        try:
+            update_button_label(reply_key, staff_lang, raw, backup=True)
+            refresh_button_maps()
+        except Exception as exc:
+            logger.exception("edit button label failed")
+            await message.reply_text(f"Save failed: {exc}\nPrevious label kept.")
+            return True
+        clear_admin_state(context)
+        await message.reply_text(
+            "✅ Button label updated.\n"
+            f"Key: {reply_key}\n"
+            f"Staff language: {staff_lang}\n"
+            f"New label: {raw}",
+        )
+        from app import send_main_menu
+
+        await send_main_menu(update, context)
+        return True
+
+    if awaiting == "image_wait_photo" and raw.strip().lower() == "/remove":
+        reply_key = str(draft.get("key", ""))
+        lang = str(draft.get("lang", ""))
+        if reply_key in get_quick_replies() and lang in EDIT_LANG_LABELS:
+            try:
+                backup_images_file()
+                remove_image(reply_key, lang, backup=False)
+            except Exception as exc:
+                logger.exception("remove image failed")
+                await message.reply_text(f"Remove failed: {exc}")
+                return True
+        clear_admin_state(context)
+        await message.reply_text("✅ Reply image removed.")
+        from app import send_main_menu
+
+        await send_main_menu(update, context)
+        return True
+
     if awaiting == "add_key":
         err = validate_new_key(raw)
         if err:
@@ -454,12 +686,25 @@ async def handle_reply_mgmt_screen(
         return True
 
     if screen == SCREEN_REPLY_MGMT:
-        if raw in (BTN_ADMIN_EDIT, BTN_ADMIN_ADD, BTN_ADMIN_DELETE) and not _owner_only(update):
+        owner_actions = (
+            BTN_ADMIN_EDIT,
+            BTN_ADMIN_EDIT_BUTTON,
+            BTN_ADMIN_SET_IMAGE,
+            BTN_ADMIN_ADD,
+            BTN_ADMIN_DELETE,
+        )
+        if raw in owner_actions and not _owner_only(update):
             if message:
                 await message.reply_text(OWNER_ACCESS_DENIED)
             return True
         if raw == BTN_ADMIN_EDIT:
             await send_admin_edit_keys_menu(update, context)
+            return True
+        if raw == BTN_ADMIN_EDIT_BUTTON:
+            await send_admin_edit_button_keys_menu(update, context)
+            return True
+        if raw == BTN_ADMIN_SET_IMAGE:
+            await send_admin_image_keys_menu(update, context)
             return True
         if raw == BTN_ADMIN_ADD:
             await start_add_reply(update, context)
@@ -493,6 +738,48 @@ async def handle_reply_mgmt_screen(
             await prompt_admin_edit_text(update, context, reply_key, edit_lang)
             return True
         await send_admin_edit_lang_menu(update, context, reply_key)
+        return True
+
+    if screen == SCREEN_ADMIN_EDIT_BUTTON_KEYS:
+        if raw in (BTN_ADMIN_BACK, back_button(staff)):
+            await send_reply_mgmt_menu(update, context)
+            return True
+        btn_key = parse_admin_button_key(raw)
+        if btn_key and key_category(btn_key):
+            await send_admin_edit_button_lang_menu(update, context, btn_key)
+            return True
+        await send_admin_edit_button_keys_menu(update, context)
+        return True
+
+    if screen == SCREEN_ADMIN_EDIT_BUTTON_LANG:
+        staff_lang = parse_edit_staff_lang(raw)
+        draft = dict(context.user_data.get(ADMIN_DRAFT) or {})
+        reply_key = str(draft.get("key", ""))
+        if staff_lang and key_category(reply_key):
+            await prompt_admin_edit_button_label(update, context, reply_key, staff_lang)
+            return True
+        await send_admin_edit_button_lang_menu(update, context, reply_key)
+        return True
+
+    if screen == SCREEN_ADMIN_IMAGE_KEYS:
+        if raw in (BTN_ADMIN_BACK, back_button(staff)):
+            await send_reply_mgmt_menu(update, context)
+            return True
+        img_key = parse_edit_reply_key(raw)
+        if img_key and img_key in get_quick_replies():
+            await send_admin_image_lang_menu(update, context, img_key)
+            return True
+        await send_admin_image_keys_menu(update, context)
+        return True
+
+    if screen == SCREEN_ADMIN_IMAGE_LANG:
+        img_lang = parse_edit_lang(raw)
+        draft = dict(context.user_data.get(ADMIN_DRAFT) or {})
+        reply_key = str(draft.get("key", ""))
+        if img_lang and reply_key in get_quick_replies():
+            await prompt_admin_image_upload(update, context, reply_key, img_lang)
+            return True
+        await send_admin_image_lang_menu(update, context, reply_key)
         return True
 
     if screen == SCREEN_ADMIN_DELETE_KEYS:
@@ -580,6 +867,9 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             backup_replies_file()
             delete_reply(key, backup=False)
             remove_button_mapping(key)
+            from reply_image_store import remove_key_images
+
+            remove_key_images(key, backup=False)
             refresh_button_maps()
             reload_quick_replies()
         except Exception as exc:

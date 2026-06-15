@@ -204,3 +204,42 @@ def remove_button_mapping(key: str) -> None:
     global _cache
     _cache = _validate_config(updated)
     logger.info("Removed button mapping key=%s category=%s", key, category)
+
+
+def button_label(key: str, staff_lang: str) -> str | None:
+    category = key_category(key)
+    if category is None:
+        return None
+    lang = staff_lang if staff_lang in STAFF_LANGS else "km"
+    return category_buttons(category, lang).get(key)
+
+
+def update_button_label(key: str, staff_lang: str, label: str, *, backup: bool = True) -> None:
+    category = key_category(key)
+    if category is None:
+        raise ValueError(f"unknown button key: {key}")
+    lang = str(staff_lang).strip().lower()
+    if lang not in STAFF_LANGS:
+        raise ValueError(f"unsupported staff language: {staff_lang}")
+    new_label = str(label).strip()
+    if not new_label:
+        raise ValueError("button label cannot be empty")
+
+    cfg = load_button_config()
+    if key not in cfg["categories"][category]["key_order"]:
+        raise ValueError(f"key not in category: {key}")
+
+    if backup:
+        backup_buttons_file()
+
+    updated = json.loads(json.dumps(cfg))
+    updated["categories"][category]["buttons"][lang][key] = new_label
+
+    try:
+        _write_json(JSON_PATH, updated)
+    except Exception:
+        raise
+
+    global _cache
+    _cache = _validate_config(updated)
+    logger.info("Updated button label key=%s lang=%s", key, lang)

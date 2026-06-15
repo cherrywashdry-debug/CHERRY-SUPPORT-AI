@@ -92,9 +92,20 @@ BTN_EDIT_REPLIES_LEGACY = "🔧 Edit Replies"  # legacy cached keyboard label
 BTN_EDIT_REPLIES = BTN_REPLY_MGMT
 
 BTN_ADMIN_EDIT = "✏️ Edit Reply"
+BTN_ADMIN_EDIT_BUTTON = "🏷️ Edit Button"
+BTN_ADMIN_SET_IMAGE = "🖼️ Set Reply Image"
 BTN_ADMIN_ADD = "➕ Add Reply"
 BTN_ADMIN_DELETE = "➖ Delete Reply"
 BTN_ADMIN_BACK = "⬅️ Back"
+
+EDIT_STAFF_LANG_LABELS: dict[str, str] = {
+    "km": "🇰🇭 KH Button",
+    "th": "🇹🇭 TH Button",
+    "id": "🇮🇩 ID Button",
+}
+LABEL_TO_EDIT_STAFF_LANG: dict[str, str] = {
+    label: code for code, label in EDIT_STAFF_LANG_LABELS.items()
+}
 
 BTN_CAT_QUESTIONS = "❓ Questions To Customer"
 BTN_CAT_REPLIES = "💬 Replies To Customer"
@@ -417,6 +428,8 @@ def admin_reply_mgmt_menu_rows(staff_lang: str) -> list[list[str]]:
     lang = normalize_staff_lang(staff_lang)
     return [
         [BTN_ADMIN_EDIT],
+        [BTN_ADMIN_EDIT_BUTTON],
+        [BTN_ADMIN_SET_IMAGE],
         [BTN_ADMIN_ADD],
         [BTN_ADMIN_DELETE],
         [BTN_ADMIN_BACK, back_button(lang)],
@@ -447,6 +460,38 @@ def admin_key_menu_rows(staff_lang: str) -> list[list[str]]:
     lang = normalize_staff_lang(staff_lang)
     rows.append([BTN_ADMIN_BACK, back_button(lang)])
     return rows
+
+
+def admin_button_key_menu_rows(staff_lang: str) -> list[list[str]]:
+    from reply_button_store import all_managed_keys, button_label
+
+    lang = normalize_staff_lang(staff_lang)
+    rows: list[list[str]] = []
+    for key in all_managed_keys():
+        current = button_label(key, lang) or key
+        rows.append([f"🏷️ {key} ({current})"])
+    rows.append([BTN_ADMIN_BACK, back_button(lang)])
+    return rows
+
+
+def parse_admin_button_key(text: str) -> str | None:
+    raw = str(text or "").strip()
+    if raw.startswith("🏷️ "):
+        body = raw[2:].strip()
+        key = body.split(" (", 1)[0].strip()
+        return key or None
+    return parse_edit_reply_key(raw)
+
+
+def edit_staff_lang_menu_rows() -> list[list[str]]:
+    return [
+        [EDIT_STAFF_LANG_LABELS["km"]],
+        [EDIT_STAFF_LANG_LABELS["th"], EDIT_STAFF_LANG_LABELS["id"]],
+    ]
+
+
+def parse_edit_staff_lang(text: str) -> str | None:
+    return LABEL_TO_EDIT_STAFF_LANG.get(str(text or "").strip())
 
 
 def parse_admin_category(text: str) -> str | None:
@@ -531,3 +576,10 @@ def quick_reply_text(key: str, customer_lang: str) -> str:
     lang = normalize_customer_lang(customer_lang)
     block = get_quick_replies().get(key, {})
     return block.get(lang, block.get("th", ""))
+
+
+def quick_reply_image_file_id(key: str, customer_lang: str) -> str:
+    from reply_image_store import get_image_file_id
+
+    lang = normalize_customer_lang(customer_lang)
+    return get_image_file_id(key, lang)
