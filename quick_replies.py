@@ -226,80 +226,90 @@ REPLY_BUTTONS: dict[str, dict[str, str]] = {
     },
 }
 
-# ── Question texts for customer (Thai first; others TODO) ─────────────────────
+# ── Question texts for customer ───────────────────────────────────────────────
+def _customer_langs(
+    th: str,
+    en: str,
+    km: str | None = None,
+    id_: str | None = None,
+    cn: str | None = None,
+) -> dict[str, str]:
+    return {
+        "th": th,
+        "en": en,
+        "km": km if km is not None else th,  # TODO: approved KH
+        "id": id_ if id_ is not None else th,  # TODO: approved ID
+        "cn": cn if cn is not None else th,  # TODO: approved CN
+    }
+
+
 QUESTIONS: dict[str, dict[str, str]] = {
-    "q_separate_wash": {
-        "th": "ลูกค้าซักแยกหรือซักรวมคะ? ช่วยแจ้งให้ทราบด้วยนะคะ",
-        # TODO: translate EN/KH/ID/CN
-        "en": "ลูกค้าซักแยกหรือซักรวมคะ? ช่วยแจ้งให้ทราบด้วยนะคะ",
-        "km": "ลูกค้าซักแยกหรือซักรวมคะ? ช่วยแจ้งให้ทราบด้วยนะคะ",
-        "id": "ลูกค้าซักแยกหรือซักรวมคะ? ช่วยแจ้งให้ทราบด้วยนะคะ",
-        "cn": "ลูกค้าซักแยกหรือซักรวมคะ? ช่วยแจ้งให้ทราบด้วยนะคะ",
-    },
-    "q_location": {
-        "th": "ขอทราบที่อยู่/โลเคชั่นด้วยค่ะ",
-        "en": "ขอทราบที่อยู่/โลเคชั่นด้วยค่ะ",
-        "km": "ขอทราบที่อยู่/โลเคชั่นด้วยค่ะ",
-        "id": "ขอทราบที่อยู่/โลเคชั่นด้วยค่ะ",
-        "cn": "ขอทราบที่อยู่/โลเคชั่นด้วยค่ะ",
-    },
-    "q_house_photo": {
-        "th": "กรุณาส่งรูปหน้าบ้านหรือจุดรับผ้าให้ชัดเจนค่ะ",
-        "en": "กรุณาส่งรูปหน้าบ้านหรือจุดรับผ้าให้ชัดเจนค่ะ",
-        "km": "กรุณาส่งรูปหน้าบ้านหรือจุดรับผ้าให้ชัดเจนค่ะ",
-        "id": "กรุณาส่งรูปหน้าบ้านหรือจุดรับผ้าให้ชัดเจนค่ะ",
-        "cn": "กรุณาส่งรูปหน้าบ้านหรือจุดรับผ้าให้ชัดเจนค่ะ",
-    },
-    "q_send_location": {
-        "th": "กรุณาส่งโลเคชั่น (Location) ค่ะ",
-        "en": "กรุณาส่งโลเคชั่น (Location) ค่ะ",
-        "km": "กรุณาส่งโลเคชั่น (Location) ค่ะ",
-        "id": "กรุณาส่งโลเคชั่น (Location) ค่ะ",
-        "cn": "กรุณาส่งโลเคชั่น (Location) ค่ะ",
-    },
-    "q_delivery_time": {
-        "th": "ต้องการให้พนักงานส่งผ้ากลับกี่โมงคะ?",
-        "en": "ต้องการให้พนักงานส่งผ้ากลับกี่โมงคะ?",
-        "km": "ต้องการให้พนักงานส่งผ้ากลับกี่โมงคะ?",
-        "id": "ต้องการให้พนักงานส่งผ้ากลับกี่โมงคะ?",
-        "cn": "ต้องการให้พนักงานส่งผ้ากลับกี่โมงคะ?",
-    },
-    "q_pickup_time": {
-        "th": "ต้องการให้พนักงานไปรับผ้ากี่โมงคะ?",
-        "en": "ต้องการให้พนักงานไปรับผ้ากี่โมงคะ?",
-        "km": "ต้องการให้พนักงานไปรับผ้ากี่โมงคะ?",
-        "id": "ต้องการให้พนักงานไปรับผ้ากี่โมงคะ?",
-        "cn": "ต้องการให้พนักงานไปรับผ้ากี่โมงคะ?",
-    },
-    "q_payment": {
-        "th": "ลูกค้าต้องการชำระเงินแบบไหนคะ? (เงินสด/โอน)",
-        "en": "ลูกค้าต้องการชำระเงินแบบไหนคะ? (เงินสด/โอน)",
-        "km": "ลูกค้าต้องการชำระเงินแบบไหนคะ? (เงินสด/โอน)",
-        "id": "ลูกค้าต้องการชำระเงินแบบไหนคะ? (เงินสด/โอน)",
-        "cn": "ลูกค้าต้องการชำระเงินแบบไหนคะ? (เงินสด/โอน)",
-    },
-    "q_bag_photo": {
-        "th": "กรุณาส่งรูปถุงผ้า/รูปกระเป๋าค่ะ",
-        "en": "กรุณาส่งรูปถุงผ้า/รูปกระเป๋าค่ะ",
-        "km": "กรุณาส่งรูปถุงผ้า/รูปกระเป๋าค่ะ",
-        "id": "กรุณาส่งรูปถุงผ้า/รูปกระเป๋าค่ะ",
-        "cn": "กรุณาส่งรูปถุงผ้า/รูปกระเป๋าค่ะ",
-    },
-    "q_confirm_wash": {
-        "th": "กรุณายืนยันรายการผ้าที่ต้องการซักค่ะ",
-        "en": "กรุณายืนยันรายการผ้าที่ต้องการซักค่ะ",
-        "km": "กรุณายืนยันรายการผ้าที่ต้องการซักค่ะ",
-        "id": "กรุณายืนยันรายการผ้าที่ต้องการซักค่ะ",
-        "cn": "กรุณายืนยันรายการผ้าที่ต้องการซักค่ะ",
-    },
+    "q_separate_wash": _customer_langs(
+        th="ลูกค้าซักแยกหรือซักรวมคะ? ช่วยแจ้งให้ทราบด้วยนะคะ",
+        en="Would you like separate wash or combined wash? Please let us know.",
+        km="តើអ្នកចង់បោកឡែង ឬបោករួម? សូមជូនដំណឹងផងណា។",
+        id_="Apakah Anda ingin cuci terpisah atau digabung? Mohon beri tahu kami.",
+        cn="请问您要分开洗还是合并洗？请告知我们。",
+    ),
+    "q_location": _customer_langs(
+        th="ขอทราบที่อยู่/โลเคชั่นด้วยค่ะ",
+        en="Please share your address/location.",
+        km="សូមផ្ញើអាសយដ្ឋាន/ទីតាំងផងណា។",
+        id_="Mohon kirim alamat/lokasi Anda.",
+        cn="请发送您的地址/位置。",
+    ),
+    "q_house_photo": _customer_langs(
+        th="กรุณาส่งรูปหน้าบ้านหรือจุดรับผ้าให้ชัดเจนค่ะ",
+        en="Please send a clear photo of your house or pickup point.",
+        km="សូមផ្ញើរូបផ្ទះ ឬចំណុចទទួលអីវ៉ាត់ឲ្យច្បាស់ផងណា។",
+        id_="Mohon kirim foto rumah atau titik penjemputan yang jelas.",
+        cn="请发送清晰的门牌或取衣点照片。",
+    ),
+    "q_send_location": _customer_langs(
+        th="กรุณาส่งโลเคชั่น (Location) ค่ะ",
+        en="Please send your location (GPS pin).",
+        km="សូមផ្ញើ Location (GPS) ផងណា។",
+        id_="Mohon kirim lokasi (GPS) Anda.",
+        cn="请发送您的位置（GPS）。",
+    ),
+    "q_delivery_time": _customer_langs(
+        th="ต้องการให้พนักงานส่งผ้ากลับกี่โมงคะ?",
+        en="What time would you like us to deliver your laundry?",
+        km="តើអ្នកចង់ឲ្យយើងដឹកអីវ៉ាត់ម៉ោងប៉ុន្មាន?",
+        id_="Jam berapa Anda ingin kami antar cucian?",
+        cn="您希望几点送达？",
+    ),
+    "q_pickup_time": _customer_langs(
+        th="ต้องการให้พนักงานไปรับผ้ากี่โมงคะ?",
+        en="What time would you like us to pick up your laundry?",
+        km="តើអ្នកចង់ឲ្យយើងមកយកអីវ៉ាត់ម៉ោងប៉ុន្មាន?",
+        id_="Jam berapa Anda ingin kami jemput cucian?",
+        cn="您希望几点上门取衣？",
+    ),
+    "q_payment": _customer_langs(
+        th="ลูกค้าต้องการชำระเงินแบบไหนคะ? (เงินสด/โอน)",
+        en="How would you like to pay? (Cash/Transfer)",
+        km="តើអ្នកចង់បង់ប្រាក់របបណា? (សាច់ប្រាក់/ផ្ទេរ)",
+        id_="Bagaimana Anda ingin membayar? (Tunai/Transfer)",
+        cn="您希望如何付款？（现金/转账）",
+    ),
+    "q_bag_photo": _customer_langs(
+        th="กรุณาส่งรูปถุงผ้า/รูปกระเป๋าค่ะ",
+        en="Please send a photo of the laundry bag.",
+        km="សូមផ្ញើរូបថង់អីវ៉ាត់ផងណា។",
+        id_="Mohon kirim foto tas cucian.",
+        cn="请发送洗衣袋照片。",
+    ),
+    "q_confirm_wash": _customer_langs(
+        th="กรุณายืนยันรายการผ้าที่ต้องการซักค่ะ",
+        en="Please confirm the items you would like us to wash.",
+        km="សូមបញ្ជាក់អីវ៉ាត់ដែលចង់បោកផងណា។",
+        id_="Mohon konfirmasi item yang ingin dicuci.",
+        cn="请确认需要清洗的衣物。",
+    ),
 }
 
 # ── Approved reply texts by KEY (edit here only) ──────────────────────────────
-def _todo_reply_langs(th_text: str) -> dict[str, str]:
-    # TODO: translate EN/KH/ID/CN
-    return {"th": th_text, "en": th_text, "km": th_text, "id": th_text, "cn": th_text}
-
-
 _REPLY_PRICE_TH = (
     "💰 ราคา\n\n"
     "CHERRY WASH & DRY POIPET 24HR\n\n"
@@ -393,6 +403,98 @@ _REPLY_BEFORE_SERVICE_TH = (
     "ขอบคุณที่สอบถาม CHERRY Wash & Dry ❤️"
 )
 
+_REPLY_PRICE_EN = (
+    "💰 Price\n\n"
+    "CHERRY WASH & DRY POIPET 24HR\n\n"
+    "🧺 Small machine (14 KG) 210–240 THB\n"
+    "🧺 Large machine (18 KG) 270–300 THB\n\n"
+    "⚠️ Priced per machine\n"
+    "❌ Not priced per kilogram\n\n"
+    "Thank you for asking CHERRY Wash & Dry ❤️"
+)
+
+_REPLY_DELIVERY_FEE_EN = (
+    "🚚 Delivery Fee\n\n"
+    "🆓 Within 1 km — free\n"
+    "💵 1–2.5 km — 10 THB\n"
+    "💵 2.5–3 km — 20 THB\n"
+    "💵 Over 3 km — 50 THB\n"
+    "💵 Over 4 km — 70 THB\n\n"
+    "Thank you for asking CHERRY Wash & Dry ❤️"
+)
+
+_REPLY_OPENING_HOURS_EN = (
+    "⏰ Opening Hours\n\n"
+    "CHERRY Wash & Dry is open 24 hours\n\n"
+    "🚚 Pickup & delivery\n"
+    "09:30 – 00:00\n\n"
+    "Thank you for asking CHERRY Wash & Dry ❤️"
+)
+
+_REPLY_PROCESSING_TIME_EN = (
+    "⏳ Processing Time\n\n"
+    "🚚 Pickup & delivery\n"
+    "Usually about 3–4 hours\n"
+    "Timing starts after:\n"
+    "✅ Laundry received\n"
+    "✅ Items checked\n"
+    "✅ Invoice issued\n\n"
+    "🏪 Walk-in customers\n"
+    "Usually about 2–3 hours\n\n"
+    "Thank you for asking CHERRY Wash & Dry ❤️"
+)
+
+_REPLY_POINTS_EN = (
+    "🎁 Reward Points\n\n"
+    "🧺 Every service of 240 THB or more\n"
+    "earns 1 point per machine\n\n"
+    "🎁 Collect 13 points\n"
+    "Get 200 THB credit for your next visit\n\n"
+    "Thank you for using CHERRY Wash & Dry ❤️"
+)
+
+_REPLY_IRONING_EN = (
+    "❌ No ironing service\n\n"
+    "Sorry,\n"
+    "CHERRY Wash & Dry currently offers:\n"
+    "🧺 Wash\n"
+    "🌬️ Dry\n"
+    "📦 Fold\n"
+    "🚚 Home pickup & delivery\n\n"
+    "We do not offer ironing at this time.\n\n"
+    "Thank you for asking CHERRY Wash & Dry ❤️"
+)
+
+_REPLY_NO_SHOES_EN = (
+    "❌ No shoe washing service\n\n"
+    "Sorry,\n"
+    "CHERRY Wash & Dry currently offers:\n"
+    "🧺 Wash\n"
+    "🌬️ Dry\n"
+    "📦 Fold\n"
+    "🚚 Home pickup & delivery\n\n"
+    "We do not offer shoe washing at this time.\n\n"
+    "Thank you for asking CHERRY Wash & Dry ❤️"
+)
+
+_REPLY_BEFORE_SERVICE_EN = (
+    "⚠️ Before using our service\n\n"
+    "CHERRY Wash & Dry uses industrial washing machines.\n\n"
+    "🧺 1 order = 1 machine\n"
+    "❌ We never mix your laundry with other customers\n\n"
+    "If you need separate loads for whites, colors, or special items, "
+    "please tell staff before washing starts.\n\n"
+    "🧦 Socks\n"
+    "🩲 Underwear\n"
+    "👶 Baby clothes\n"
+    "or small items — use a laundry bag before sending.\n\n"
+    "Some fabrics may shrink, stretch, fade, or bleed depending on "
+    "material, age, and quality.\n\n"
+    "For delicate, expensive, or special items, please inform staff "
+    "before washing.\n\n"
+    "Thank you for asking CHERRY Wash & Dry ❤️"
+)
+
 # Reply Pack V2
 _REPLY_LAUNDRY_READY_TH = (
     "📦 ผ้าของลูกค้าพร้อมแล้วค่ะ\n\n"
@@ -439,23 +541,74 @@ _REPLY_ASK_SEPARATE_OR_TOGETHER_TH = (
     "กรุณาแจ้งให้ทางร้านทราบล่วงหน้าด้วยนะคะ ❤️"
 )
 
+_REPLY_LAUNDRY_READY_EN = (
+    "📦 Your laundry is ready\n\n"
+    "You may pick up at the shop or ask us to deliver it back.\n\n"
+    "Thank you for using CHERRY Wash & Dry ❤️"
+)
+
+_REPLY_STAFF_ON_THE_WAY_DELIVERY_EN = (
+    "🚚 Our staff is on the way to deliver your laundry\n\n"
+    "Please wait a moment and be ready to receive it at the location you shared.\n\n"
+    "Thank you for trusting CHERRY Wash & Dry ❤️"
+)
+
+_REPLY_STAFF_ON_THE_WAY_PICKUP_EN = (
+    "🛵 Our staff is on the way to pick up your laundry\n\n"
+    "Please wait a moment and have the laundry bag ready at the pickup point you shared.\n\n"
+    "Thank you for trusting CHERRY Wash & Dry ❤️"
+)
+
+_REPLY_ASK_LOCATION_EN = (
+    "📍 Please send your location to us\n\n"
+    "So our staff can check the distance, calculate the delivery fee, "
+    "and navigate correctly ❤️"
+)
+
+_REPLY_ASK_HOME_PHOTO_EN = (
+    "🏠 Please send a clear photo of your house or pickup point\n\n"
+    "So our staff can find the location easily and correctly ❤️"
+)
+
+_REPLY_ASK_BAG_PHOTO_EN = (
+    "👜 Please send a photo of the laundry bag you want us to pick up\n\n"
+    "So our staff can verify and collect it correctly ❤️"
+)
+
+_REPLY_PAYMENT_METHOD_EN = (
+    "💳 How would you like to pay?\n\n"
+    "Please tell us your preferred payment method ❤️"
+)
+
+_REPLY_ASK_SEPARATE_OR_TOGETHER_EN = (
+    "🧺 Would you like separate wash or combined wash?\n\n"
+    "If you need separate loads for whites, colors, or special items, "
+    "please let us know in advance ❤️"
+)
+
 QUICK_REPLIES: dict[str, dict[str, str]] = {
-    "price": _todo_reply_langs(_REPLY_PRICE_TH),
-    "delivery_fee": _todo_reply_langs(_REPLY_DELIVERY_FEE_TH),
-    "opening_hours": _todo_reply_langs(_REPLY_OPENING_HOURS_TH),
-    "processing_time": _todo_reply_langs(_REPLY_PROCESSING_TIME_TH),
-    "points": _todo_reply_langs(_REPLY_POINTS_TH),
-    "ironing": _todo_reply_langs(_REPLY_IRONING_TH),
-    "no_shoes": _todo_reply_langs(_REPLY_NO_SHOES_TH),
-    "before_service": _todo_reply_langs(_REPLY_BEFORE_SERVICE_TH),
-    "laundry_ready": _todo_reply_langs(_REPLY_LAUNDRY_READY_TH),
-    "staff_on_the_way_delivery": _todo_reply_langs(_REPLY_STAFF_ON_THE_WAY_DELIVERY_TH),
-    "staff_on_the_way_pickup": _todo_reply_langs(_REPLY_STAFF_ON_THE_WAY_PICKUP_TH),
-    "ask_location": _todo_reply_langs(_REPLY_ASK_LOCATION_TH),
-    "ask_home_photo": _todo_reply_langs(_REPLY_ASK_HOME_PHOTO_TH),
-    "ask_bag_photo": _todo_reply_langs(_REPLY_ASK_BAG_PHOTO_TH),
-    "payment_method": _todo_reply_langs(_REPLY_PAYMENT_METHOD_TH),
-    "ask_separate_or_together": _todo_reply_langs(_REPLY_ASK_SEPARATE_OR_TOGETHER_TH),
+    "price": _customer_langs(_REPLY_PRICE_TH, _REPLY_PRICE_EN),
+    "delivery_fee": _customer_langs(_REPLY_DELIVERY_FEE_TH, _REPLY_DELIVERY_FEE_EN),
+    "opening_hours": _customer_langs(_REPLY_OPENING_HOURS_TH, _REPLY_OPENING_HOURS_EN),
+    "processing_time": _customer_langs(_REPLY_PROCESSING_TIME_TH, _REPLY_PROCESSING_TIME_EN),
+    "points": _customer_langs(_REPLY_POINTS_TH, _REPLY_POINTS_EN),
+    "ironing": _customer_langs(_REPLY_IRONING_TH, _REPLY_IRONING_EN),
+    "no_shoes": _customer_langs(_REPLY_NO_SHOES_TH, _REPLY_NO_SHOES_EN),
+    "before_service": _customer_langs(_REPLY_BEFORE_SERVICE_TH, _REPLY_BEFORE_SERVICE_EN),
+    "laundry_ready": _customer_langs(_REPLY_LAUNDRY_READY_TH, _REPLY_LAUNDRY_READY_EN),
+    "staff_on_the_way_delivery": _customer_langs(
+        _REPLY_STAFF_ON_THE_WAY_DELIVERY_TH, _REPLY_STAFF_ON_THE_WAY_DELIVERY_EN
+    ),
+    "staff_on_the_way_pickup": _customer_langs(
+        _REPLY_STAFF_ON_THE_WAY_PICKUP_TH, _REPLY_STAFF_ON_THE_WAY_PICKUP_EN
+    ),
+    "ask_location": _customer_langs(_REPLY_ASK_LOCATION_TH, _REPLY_ASK_LOCATION_EN),
+    "ask_home_photo": _customer_langs(_REPLY_ASK_HOME_PHOTO_TH, _REPLY_ASK_HOME_PHOTO_EN),
+    "ask_bag_photo": _customer_langs(_REPLY_ASK_BAG_PHOTO_TH, _REPLY_ASK_BAG_PHOTO_EN),
+    "payment_method": _customer_langs(_REPLY_PAYMENT_METHOD_TH, _REPLY_PAYMENT_METHOD_EN),
+    "ask_separate_or_together": _customer_langs(
+        _REPLY_ASK_SEPARATE_OR_TOGETHER_TH, _REPLY_ASK_SEPARATE_OR_TOGETHER_EN
+    ),
 }
 
 # ── Lookups ───────────────────────────────────────────────────────────────────

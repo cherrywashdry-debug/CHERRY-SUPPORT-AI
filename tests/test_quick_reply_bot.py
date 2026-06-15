@@ -6,6 +6,7 @@ from quick_replies import (
     QUICK_REPLIES,
     REPLY_KEY_ORDER,
     parse_reply_label,
+    question_text,
     quick_reply_text,
     reply_menu_rows,
 )
@@ -67,6 +68,19 @@ def test_ask_separate_or_together_thai() -> None:
     assert "ลูกค้าต้องการซักแยก หรือซักรวมกันคะ?" in text
 
 
+def test_question_english_not_thai() -> None:
+    text = question_text("q_separate_wash", "en")
+    assert "Would you like separate wash" in text
+    assert "ลูกค้า" not in text
+
+
+def test_reply_english_not_thai() -> None:
+    text = quick_reply_text("price", "en")
+    assert "Price" in text
+    assert "210–240 THB" in text
+    assert "บาท" not in text
+
+
 def test_all_reply_keys_in_quick_replies() -> None:
     for key in REPLY_KEY_ORDER:
         assert key in QUICK_REPLIES
@@ -80,5 +94,7 @@ if __name__ == "__main__":
     test_laundry_ready_reply_thai_exact()
     test_staff_on_the_way_delivery_thai()
     test_ask_separate_or_together_thai()
+    test_question_english_not_thai()
+    test_reply_english_not_thai()
     test_all_reply_keys_in_quick_replies()
     print("ALL OK")
