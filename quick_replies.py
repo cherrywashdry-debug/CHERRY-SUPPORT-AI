@@ -1,6 +1,8 @@
 """Fixed quick replies for CHERRY Quick Reply Bot — edit approved text here only."""
 from __future__ import annotations
 
+from reply_customer_texts import REPLY_CN, REPLY_ID, REPLY_KM
+
 STAFF_LANGS = frozenset({"km", "th", "id"})
 CUSTOMER_LANGS = frozenset({"th", "en", "km", "id", "cn"})
 DEFAULT_STAFF_LANG = "km"
@@ -41,6 +43,7 @@ STAFF_UI: dict[str, dict[str, str]] = {
         "header_questions": f"{EMOJI_QUESTION} សួរអតិថិជន",
         "header_replies": f"{EMOJI_CHAT} ឆ្លើយអតិថិជន",
         "session_cleared": "លុប Session រួចរាល់",
+        "customer_lang_set": "ភាសាអតិថិជន: {name}",
     },
     "th": {
         "menu_questions": f"{EMOJI_QUESTION} ถามลูกค้า",
@@ -55,6 +58,7 @@ STAFF_UI: dict[str, dict[str, str]] = {
         "header_questions": f"{EMOJI_QUESTION} ถามลูกค้า",
         "header_replies": f"{EMOJI_CHAT} ตอบลูกค้า",
         "session_cleared": "ล้าง Session แล้ว",
+        "customer_lang_set": "ภาษาลูกค้า: {name}",
     },
     "id": {
         "menu_questions": f"{EMOJI_QUESTION} Tanya Pelanggan",
@@ -69,6 +73,7 @@ STAFF_UI: dict[str, dict[str, str]] = {
         "header_questions": f"{EMOJI_QUESTION} Tanya Pelanggan",
         "header_replies": f"{EMOJI_CHAT} Balas Pelanggan",
         "session_cleared": "Session dihapus",
+        "customer_lang_set": "Bahasa pelanggan: {name}",
     },
 }
 
@@ -230,17 +235,15 @@ REPLY_BUTTONS: dict[str, dict[str, str]] = {
 def _customer_langs(
     th: str,
     en: str,
-    km: str | None = None,
-    id_: str | None = None,
-    cn: str | None = None,
+    km: str,
+    id_: str,
+    cn: str,
 ) -> dict[str, str]:
-    return {
-        "th": th,
-        "en": en,
-        "km": km if km is not None else th,  # TODO: approved KH
-        "id": id_ if id_ is not None else th,  # TODO: approved ID
-        "cn": cn if cn is not None else th,  # TODO: approved CN
-    }
+    return {"th": th, "en": en, "km": km, "id": id_, "cn": cn}
+
+
+def _reply_block(key: str, th: str, en: str) -> dict[str, str]:
+    return _customer_langs(th, en, REPLY_KM[key], REPLY_ID[key], REPLY_CN[key])
 
 
 QUESTIONS: dict[str, dict[str, str]] = {
@@ -587,27 +590,35 @@ _REPLY_ASK_SEPARATE_OR_TOGETHER_EN = (
 )
 
 QUICK_REPLIES: dict[str, dict[str, str]] = {
-    "price": _customer_langs(_REPLY_PRICE_TH, _REPLY_PRICE_EN),
-    "delivery_fee": _customer_langs(_REPLY_DELIVERY_FEE_TH, _REPLY_DELIVERY_FEE_EN),
-    "opening_hours": _customer_langs(_REPLY_OPENING_HOURS_TH, _REPLY_OPENING_HOURS_EN),
-    "processing_time": _customer_langs(_REPLY_PROCESSING_TIME_TH, _REPLY_PROCESSING_TIME_EN),
-    "points": _customer_langs(_REPLY_POINTS_TH, _REPLY_POINTS_EN),
-    "ironing": _customer_langs(_REPLY_IRONING_TH, _REPLY_IRONING_EN),
-    "no_shoes": _customer_langs(_REPLY_NO_SHOES_TH, _REPLY_NO_SHOES_EN),
-    "before_service": _customer_langs(_REPLY_BEFORE_SERVICE_TH, _REPLY_BEFORE_SERVICE_EN),
-    "laundry_ready": _customer_langs(_REPLY_LAUNDRY_READY_TH, _REPLY_LAUNDRY_READY_EN),
-    "staff_on_the_way_delivery": _customer_langs(
-        _REPLY_STAFF_ON_THE_WAY_DELIVERY_TH, _REPLY_STAFF_ON_THE_WAY_DELIVERY_EN
+    "price": _reply_block("price", _REPLY_PRICE_TH, _REPLY_PRICE_EN),
+    "delivery_fee": _reply_block("delivery_fee", _REPLY_DELIVERY_FEE_TH, _REPLY_DELIVERY_FEE_EN),
+    "opening_hours": _reply_block("opening_hours", _REPLY_OPENING_HOURS_TH, _REPLY_OPENING_HOURS_EN),
+    "processing_time": _reply_block(
+        "processing_time", _REPLY_PROCESSING_TIME_TH, _REPLY_PROCESSING_TIME_EN
     ),
-    "staff_on_the_way_pickup": _customer_langs(
-        _REPLY_STAFF_ON_THE_WAY_PICKUP_TH, _REPLY_STAFF_ON_THE_WAY_PICKUP_EN
+    "points": _reply_block("points", _REPLY_POINTS_TH, _REPLY_POINTS_EN),
+    "ironing": _reply_block("ironing", _REPLY_IRONING_TH, _REPLY_IRONING_EN),
+    "no_shoes": _reply_block("no_shoes", _REPLY_NO_SHOES_TH, _REPLY_NO_SHOES_EN),
+    "before_service": _reply_block("before_service", _REPLY_BEFORE_SERVICE_TH, _REPLY_BEFORE_SERVICE_EN),
+    "laundry_ready": _reply_block("laundry_ready", _REPLY_LAUNDRY_READY_TH, _REPLY_LAUNDRY_READY_EN),
+    "staff_on_the_way_delivery": _reply_block(
+        "staff_on_the_way_delivery",
+        _REPLY_STAFF_ON_THE_WAY_DELIVERY_TH,
+        _REPLY_STAFF_ON_THE_WAY_DELIVERY_EN,
     ),
-    "ask_location": _customer_langs(_REPLY_ASK_LOCATION_TH, _REPLY_ASK_LOCATION_EN),
-    "ask_home_photo": _customer_langs(_REPLY_ASK_HOME_PHOTO_TH, _REPLY_ASK_HOME_PHOTO_EN),
-    "ask_bag_photo": _customer_langs(_REPLY_ASK_BAG_PHOTO_TH, _REPLY_ASK_BAG_PHOTO_EN),
-    "payment_method": _customer_langs(_REPLY_PAYMENT_METHOD_TH, _REPLY_PAYMENT_METHOD_EN),
-    "ask_separate_or_together": _customer_langs(
-        _REPLY_ASK_SEPARATE_OR_TOGETHER_TH, _REPLY_ASK_SEPARATE_OR_TOGETHER_EN
+    "staff_on_the_way_pickup": _reply_block(
+        "staff_on_the_way_pickup",
+        _REPLY_STAFF_ON_THE_WAY_PICKUP_TH,
+        _REPLY_STAFF_ON_THE_WAY_PICKUP_EN,
+    ),
+    "ask_location": _reply_block("ask_location", _REPLY_ASK_LOCATION_TH, _REPLY_ASK_LOCATION_EN),
+    "ask_home_photo": _reply_block("ask_home_photo", _REPLY_ASK_HOME_PHOTO_TH, _REPLY_ASK_HOME_PHOTO_EN),
+    "ask_bag_photo": _reply_block("ask_bag_photo", _REPLY_ASK_BAG_PHOTO_TH, _REPLY_ASK_BAG_PHOTO_EN),
+    "payment_method": _reply_block("payment_method", _REPLY_PAYMENT_METHOD_TH, _REPLY_PAYMENT_METHOD_EN),
+    "ask_separate_or_together": _reply_block(
+        "ask_separate_or_together",
+        _REPLY_ASK_SEPARATE_OR_TOGETHER_TH,
+        _REPLY_ASK_SEPARATE_OR_TOGETHER_EN,
     ),
 }
 

@@ -50,7 +50,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - FIXED-V2.4"
+VERSION = "CHERRY QUICK REPLY - FIXED-V2.5"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -275,6 +275,21 @@ async def ensure_ready_for_main(
     return True
 
 
+async def apply_customer_lang(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    code: str,
+) -> None:
+    set_customer_lang(context, code)
+    message = update.effective_message
+    staff = get_staff_lang(context)
+    if message:
+        await message.reply_text(
+            staff_ui(staff, "customer_lang_set").format(name=customer_lang_name(code)),
+        )
+    await send_main_menu(update, context)
+
+
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if await deny_if_not_staff(update):
         return
@@ -377,8 +392,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     picked_customer = customer_lang_from_label(raw)
     if picked_customer and staff_lang_is_set(context) and not customer_lang_is_set(context):
-        set_customer_lang(context, picked_customer)
-        await send_main_menu(update, context)
+        await apply_customer_lang(update, context, picked_customer)
         return
 
     if picked_staff and staff_lang_is_set(context) and not customer_lang_is_set(context):
@@ -387,8 +401,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     if picked_customer and customer_lang_is_set(context):
-        set_customer_lang(context, picked_customer)
-        await send_main_menu(update, context)
+        await apply_customer_lang(update, context, picked_customer)
         return
 
     if not await ensure_ready_for_main(update, context):

@@ -81,6 +81,30 @@ def test_reply_english_not_thai() -> None:
     assert "บาท" not in text
 
 
+def test_reply_khmer_not_thai() -> None:
+    text = quick_reply_text("price", "km")
+    assert "តម្លៃ" in text
+    assert "บาท" not in text
+
+
+def test_reply_indonesian_not_thai() -> None:
+    text = quick_reply_text("price", "id")
+    assert "Harga" in text
+    assert "บาท" not in text
+
+
+def test_reply_chinese_not_thai() -> None:
+    text = quick_reply_text("price", "cn")
+    assert "价格" in text
+    assert "บาท" not in text
+
+
+def test_question_khmer_customer() -> None:
+    text = question_text("q_separate_wash", "km")
+    assert "បោក" in text
+    assert "ลูกค้า" not in text
+
+
 def test_all_reply_keys_in_quick_replies() -> None:
     for key in REPLY_KEY_ORDER:
         assert key in QUICK_REPLIES
@@ -96,5 +120,9 @@ if __name__ == "__main__":
     test_ask_separate_or_together_thai()
     test_question_english_not_thai()
     test_reply_english_not_thai()
+    test_reply_khmer_not_thai()
+    test_reply_indonesian_not_thai()
+    test_reply_chinese_not_thai()
+    test_question_khmer_customer()
     test_all_reply_keys_in_quick_replies()
     print("ALL OK")
