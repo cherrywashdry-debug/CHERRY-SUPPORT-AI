@@ -94,7 +94,30 @@ BTN_EDIT_REPLIES = BTN_REPLY_MGMT
 BTN_STAFF_MGMT = "👩‍💼 Staff Mgmt"
 BTN_STAFF_MGMT_LEGACY = "👩‍💼 Staff Management"
 
-KEYBOARD_LABEL_MAX_LEN = 20
+KEYBOARD_SHORT_MAX_LEN = 18
+KEYBOARD_LONG_MIN_LEN = 25
+KEYBOARD_ROW_MAX_SHORT = 3
+KEYBOARD_ROW_MAX_MEDIUM = 2
+
+# Staff quick-reply keyboard row order (layout only — reply texts unchanged).
+STAFF_KEYBOARD_KEY_ORDER: list[str] = [
+    "price",
+    "delivery_fee",
+    "opening_hours",
+    "processing_time",
+    "points",
+    "laundry_ready",
+    "staff_on_the_way_delivery",
+    "staff_on_the_way_pickup",
+    "ask_location",
+    "ask_home_photo",
+    "ask_bag_photo",
+    "payment_method",
+    "ironing",
+    "no_shoes",
+    "ask_separate_or_together",
+    "before_service",
+]
 
 BTN_ADMIN_EDIT = "✏️ Edit Reply"
 BTN_ADMIN_EDIT_BUTTON = "🏷️ Edit Button"
@@ -276,31 +299,84 @@ def _register_command(cmd_map: dict[str, str], label: str, key: str) -> None:
 
 
 def keyboard_button_display_text(key: str, full_label: str, *, custom_emoji_id: str | None) -> str:
+    """Full button text for Reply Keyboard — never truncated."""
+    text = str(full_label or "").strip()
     if custom_emoji_id:
-        parts = full_label.strip().split(None, 1)
-        text = parts[1].strip() if len(parts) > 1 else full_label.strip()
-        if len(text) > KEYBOARD_LABEL_MAX_LEN:
-            return text[:KEYBOARD_LABEL_MAX_LEN]
-        if text:
-            return text
-    return keyboard_button_label(key, full_label)
+        parts = text.split(None, 1)
+        if len(parts) > 1:
+            return parts[1].strip() or text
+    return text
 
 
 def keyboard_button_label(key: str, full_label: str) -> str:
-    """Short label for bottom Reply Keyboard — two buttons per row on mobile."""
-    parts = full_label.strip().split(None, 1)
+    """Legacy compact alias for keyboard parsing (full label is shown on buttons)."""
+    text = str(full_label or "").strip()
+    parts = text.split(None, 1)
     emoji = parts[0] if parts else "📝"
     if len(parts) > 1:
         suffix = parts[1].split()[0]
         if suffix.startswith("/"):
-            candidate = f"{emoji} {suffix}"
-            if len(candidate) <= KEYBOARD_LABEL_MAX_LEN:
-                return candidate
-    short = f"{emoji} /{key}"
-    if len(short) <= KEYBOARD_LABEL_MAX_LEN:
-        return short
-    trim = KEYBOARD_LABEL_MAX_LEN - len(emoji) - 2
-    return f"{emoji} /{key[:max(trim, 4)]}"
+            return f"{emoji} {suffix}"
+    return text
+
+
+def _is_solo_row_button(text: str) -> bool:
+    raw = str(text or "").strip()
+    if raw.startswith(EMOJI_WARN):
+        return True
+    return len(raw) >= KEYBOARD_LONG_MIN_LEN
+
+
+def _button_width_class(text: str) -> str:
+    if _is_solo_row_button(text):
+        return "long"
+    length = len(str(text or "").strip())
+    if length <= KEYBOARD_SHORT_MAX_LEN:
+        return "short"
+    return "medium"
+
+
+def pack_button_specs_into_rows(
+    specs: list[tuple[str, str | None]],
+) -> list[list[tuple[str, str | None]]]:
+    """Short labels: up to 3 per row. Medium: up to 2. Long: one per row."""
+    rows: list[list[tuple[str, str | None]]] = []
+    bucket: list[tuple[str, str | None]] = []
+
+    def flush() -> None:
+        nonlocal bucket
+        if bucket:
+            rows.append(bucket)
+            bucket = []
+
+    def bucket_limit() -> int:
+        if not bucket:
+            return KEYBOARD_ROW_MAX_SHORT
+        classes = {_button_width_class(text) for text, _ in bucket}
+        if "medium" in classes:
+            return KEYBOARD_ROW_MAX_MEDIUM
+        return KEYBOARD_ROW_MAX_SHORT
+
+    for spec in specs:
+        text, _emoji_id = spec
+        width = _button_width_class(text)
+        if width == "long":
+            flush()
+            rows.append([spec])
+            continue
+        limit = KEYBOARD_ROW_MAX_MEDIUM if width == "medium" else KEYBOARD_ROW_MAX_SHORT
+        if bucket:
+            current_limit = bucket_limit()
+            if len(bucket) >= current_limit or width == "medium" and "short" in {
+                _button_width_class(t) for t, _ in bucket
+            }:
+                flush()
+        bucket.append(spec)
+        if len(bucket) >= limit:
+            flush()
+
+    flush()
+    return rows
 
 
 def _key_picker_label(key: str) -> str:
@@ -468,7 +544,7 @@ def unified_reply_key_order() -> list[str]:
     reply_keys = set(get_quick_replies().keys())
     seen: set[str] = set()
     ordered: list[str] = []
-    for key in REPLY_KEY_ORDER + STATUS_KEY_ORDER:
+    for key in STAFF_KEYBOARD_KEY_ORDER + REPLY_KEY_ORDER + STATUS_KEY_ORDER:
         if key in reply_keys and key not in seen:
             seen.add(key)
             ordered.append(key)
@@ -498,7 +574,7 @@ def staff_quick_reply_keyboard_rows(
     lang = normalize_staff_lang(staff_lang)
     ui = STAFF_UI[lang]
     specs = unified_button_specs(staff_lang)
-    rows = [specs[i : i + 2] for i in range(0, len(specs), 2)]
+    rows = pack_button_specs_into_rows(specs)
     rows.append([(ui["menu_change_staff"], None), (ui["menu_change_customer"], None)])
     rows.append([(ui["menu_clear"], None)])
     if show_staff_management:
@@ -641,9 +717,7 @@ def _category_button_specs(staff_lang: str, category: str) -> list[tuple[str, st
 
 
 def category_menu_button_rows(staff_lang: str, category: str) -> list[list[tuple[str, str | None]]]:
-    specs = _category_button_specs(staff_lang, category)
-    rows = [specs[i : i + 2] for i in range(0, len(specs), 2)]
-    return rows
+    return pack_button_specs_into_rows(_category_button_specs(staff_lang, category))
 
 
 def _category_keyboard_labels(staff_lang: str, category: str) -> list[str]:

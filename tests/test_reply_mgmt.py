@@ -180,6 +180,23 @@ def test_owner_access_denied_message() -> None:
     assert "Owner only" in OWNER_ACCESS_DENIED
 
 
+def test_pack_button_specs_into_rows() -> None:
+    from quick_replies import pack_button_specs_into_rows
+
+    specs = [
+        ("💰 ราคา", None),
+        ("🚚 ค่าส่ง", None),
+        ("⏰ เวลาเปิด", None),
+        ("⚠️ ข้อควรทราบก่อนใช้บริการ", None),
+        ("🧺 ซักรวม/ซักแยก", None),
+    ]
+    rows = pack_button_specs_into_rows(specs)
+    assert len(rows[0]) == 3
+    assert len(rows[1]) == 1
+    assert "⚠️" in rows[1][0][0]
+    assert rows[2][0][0].startswith("🧺")
+
+
 def test_main_menu_hides_admin_tools_from_staff() -> None:
     from quick_replies import BTN_STAFF_MGMT, main_menu_rows
 
@@ -200,5 +217,6 @@ if __name__ == "__main__":
     test_add_and_delete_reply_roundtrip()
     test_timestamped_reply_backup()
     test_owner_access_denied_message()
+    test_pack_button_specs_into_rows()
     test_main_menu_hides_admin_tools_from_staff()
     print("ALL OK")
