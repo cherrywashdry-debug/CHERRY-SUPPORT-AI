@@ -26,6 +26,7 @@ from telegram.ext import (
 from quick_replies import (
     BTN_EDIT_REPLIES_LEGACY,
     BTN_REPLY_MGMT,
+    BTN_STAFF_MGMT,
     CUSTOMER_LANG_LABELS,
     DEFAULT_CUSTOMER_LANG,
     DEFAULT_STAFF_LANG,
@@ -71,7 +72,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - FIXED-V3.3"
+VERSION = "CHERRY QUICK REPLY - FIXED-V3.4"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -88,7 +89,6 @@ SCREEN_STATUS = "status"
 SCREEN_STAFF_MGMT = "staff_mgmt"
 SCREEN_REMOVE_STAFF = "remove_staff"
 
-BTN_STAFF_MGMT = "👩‍💼 Staff Management"
 BTN_STAFF_LIST = "📋 Staff List"
 BTN_REMOVE_STAFF = "➖ Remove Staff"
 BTN_PENDING_REQUESTS = "🔄 Pending Requests"
@@ -251,9 +251,11 @@ async def send_access_gate(update: Update) -> None:
 
 
 def build_main_menu_keyboard(staff_lang: str, *, is_owner_user: bool) -> ReplyKeyboardMarkup:
-    rows = list(main_menu_rows(staff_lang, show_reply_management=is_owner_user))
-    if is_owner_user:
-        rows.insert(-1, [BTN_STAFF_MGMT])
+    rows = main_menu_rows(
+        staff_lang,
+        show_reply_management=is_owner_user,
+        show_staff_management=is_owner_user,
+    )
     return keyboard(rows)
 
 
@@ -696,7 +698,7 @@ async def handle_main_menu_choice(
     if action == "reply_management":
         await send_reply_mgmt_menu(update, context)
         return True
-    if raw == BTN_STAFF_MGMT:
+    if action == "staff_management":
         await send_staff_mgmt_menu(update, context)
         return True
     return False
@@ -796,11 +798,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await send_remove_staff_menu(update, context)
         return
 
-    if screen == SCREEN_MAIN or is_main_menu_label(raw) or raw == BTN_STAFF_MGMT:
-        if is_main_menu_label(raw) or raw == BTN_STAFF_MGMT:
-            if raw == BTN_STAFF_MGMT:
-                await send_staff_mgmt_menu(update, context)
-                return
+    if screen == SCREEN_MAIN or is_main_menu_label(raw):
+        if is_main_menu_label(raw):
             await handle_main_menu_choice(update, context, raw)
             return
         await send_main_menu(update, context)

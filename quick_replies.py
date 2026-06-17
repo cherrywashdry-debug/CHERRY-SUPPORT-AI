@@ -90,6 +90,7 @@ BTN_MENU_CLEAR = STAFF_UI["km"]["menu_clear"]
 BTN_REPLY_MGMT = "🔧 Reply Management"
 BTN_EDIT_REPLIES_LEGACY = "🔧 Edit Replies"  # legacy cached keyboard label
 BTN_EDIT_REPLIES = BTN_REPLY_MGMT
+BTN_STAFF_MGMT = "👩‍💼 Staff Management"
 
 BTN_ADMIN_EDIT = "✏️ Edit Reply"
 BTN_ADMIN_EDIT_BUTTON = "🏷️ Edit Button"
@@ -337,6 +338,8 @@ def main_menu_action(text: str) -> str | None:
     raw = str(text or "").strip()
     if is_reply_management_main_label(raw):
         return "reply_management"
+    if raw == BTN_STAFF_MGMT:
+        return "staff_management"
     action_keys = (
         "menu_questions",
         "menu_replies",
@@ -404,24 +407,27 @@ def _rows_one_per_label(labels: list[str], staff_lang: str) -> list[list[str]]:
     return rows
 
 
-def main_menu_rows(staff_lang: str, *, show_reply_management: bool = False) -> list[list[str]]:
+def main_menu_rows(
+    staff_lang: str,
+    *,
+    show_reply_management: bool = False,
+    show_staff_management: bool = False,
+) -> list[list[str]]:
     lang = normalize_staff_lang(staff_lang)
     ui = STAFF_UI[lang]
-    rows = [
-        [ui["menu_questions"]],
-        [ui["menu_replies"]],
-    ]
+    row1 = [ui["menu_questions"], ui["menu_replies"]]
     if STATUS_KEY_ORDER:
-        rows.append([ui["menu_status"]])
-    if show_reply_management:
-        rows.append([BTN_REPLY_MGMT])
-    rows.extend(
-        [
-            [ui["menu_change_customer"], ui["menu_change_staff"]],
-            [ui["menu_clear"]],
-        ]
-    )
-    return rows
+        row1.append(ui["menu_status"])
+    if show_reply_management or show_staff_management:
+        row2: list[str] = []
+        if show_reply_management:
+            row2.append(BTN_REPLY_MGMT)
+        if show_staff_management:
+            row2.append(BTN_STAFF_MGMT)
+        row2.extend([ui["menu_change_customer"], ui["menu_change_staff"], ui["menu_clear"]])
+    else:
+        row2 = [ui["menu_change_customer"], ui["menu_change_staff"], ui["menu_clear"]]
+    return [row1, row2]
 
 
 def admin_reply_mgmt_menu_rows(staff_lang: str) -> list[list[str]]:
