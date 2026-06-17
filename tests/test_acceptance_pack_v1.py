@@ -96,11 +96,11 @@ def test_staff_language_buttons() -> None:
 
 def test_customer_language_buttons() -> None:
     expected = [
-        "🇹🇭 Thai",
-        "🇬🇧 English",
-        "🇰🇭 Khmer",
-        "🇮🇩 Indonesian",
-        "🇨🇳 Chinese",
+        "🇹🇭 Thai Customer",
+        "🇬🇧 English Customer",
+        "🇰🇭 Khmer Customer",
+        "🇮🇩 Indonesian Customer",
+        "🇨🇳 Chinese Customer",
     ]
     assert list(CUSTOMER_LANG_LABELS.values()) == expected
 

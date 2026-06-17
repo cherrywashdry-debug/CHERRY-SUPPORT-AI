@@ -180,12 +180,16 @@ def test_owner_access_denied_message() -> None:
     assert "Owner only" in OWNER_ACCESS_DENIED
 
 
-def test_main_menu_reply_management_label() -> None:
-    from quick_replies import main_menu_rows
+def test_main_menu_hides_admin_tools_from_staff() -> None:
+    from quick_replies import BTN_STAFF_MGMT, main_menu_rows
 
-    flat = [b for row in main_menu_rows("km", show_reply_management=True) for b in row]
-    assert BTN_REPLY_MGMT == "🔧 Reply Mgmt"
-    assert BTN_REPLY_MGMT in flat
+    staff_flat = [b for row in main_menu_rows("km") for b in row]
+    assert BTN_REPLY_MGMT not in staff_flat
+    assert BTN_STAFF_MGMT not in staff_flat
+
+    owner_flat = [b for row in main_menu_rows("km", show_staff_management=True) for b in row]
+    assert BTN_STAFF_MGMT in owner_flat
+    assert BTN_REPLY_MGMT not in owner_flat
 
 
 if __name__ == "__main__":
@@ -196,5 +200,5 @@ if __name__ == "__main__":
     test_add_and_delete_reply_roundtrip()
     test_timestamped_reply_backup()
     test_owner_access_denied_message()
-    test_main_menu_reply_management_label()
+    test_main_menu_hides_admin_tools_from_staff()
     print("ALL OK")

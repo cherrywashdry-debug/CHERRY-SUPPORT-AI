@@ -9,13 +9,13 @@ from pathlib import Path
 
 import reply_store
 from quick_replies import (
-    BTN_REPLY_MGMT,
+    BTN_ADMIN_EDIT,
     EDIT_REPLY_KEY_LABELS,
     EDIT_LANG_LABELS,
     OWNER_ACCESS_DENIED,
     REPLY_KEY_ORDER,
+    admin_reply_mgmt_menu_rows,
     get_quick_replies,
-    main_menu_rows,
     parse_edit_lang,
     parse_edit_reply_key,
     quick_reply_text,
@@ -29,9 +29,9 @@ def test_json_has_all_reply_keys() -> None:
         assert set(data[key].keys()) == {"th", "en", "km", "id", "cn"}
 
 
-def test_main_menu_has_reply_management() -> None:
-    flat = [b for row in main_menu_rows("km", show_reply_management=True) for b in row]
-    assert BTN_REPLY_MGMT in flat
+def test_admin_menu_has_reply_tools() -> None:
+    flat = [b for row in admin_reply_mgmt_menu_rows("km") for b in row]
+    assert BTN_ADMIN_EDIT in flat
 
 
 def test_edit_key_labels_count() -> None:
@@ -80,7 +80,7 @@ def test_owner_access_denied_message() -> None:
 
 if __name__ == "__main__":
     test_json_has_all_reply_keys()
-    test_main_menu_has_reply_management()
+    test_admin_menu_has_reply_tools()
     test_edit_key_labels_count()
     test_parse_edit_reply_key_ironing()
     test_parse_edit_lang_th()

@@ -41,7 +41,7 @@ STAFF_UI: dict[str, dict[str, str]] = {
         "back": "ត្រឡប់",
         "prompt_start": "🍒 CHERRY QUICK REPLY\n\nសូមជ្រើសរើសភាសាបុគ្គលិក:",
         "prompt_customer": "ភាសាបុគ្គលិក: {staff}\n\nសូមជ្រើសរើសភាសាអតិថិជន:",
-        "prompt_main": "🍒 CHERRY QUICK REPLY\n\nសូមជ្រើសរើសម៉ឺនុយ:",
+        "prompt_main": "🍒 CHERRY QUICK REPLY\n\nភាសាអតិថិជន: {customer}\n\nចុចប៊ូតុងដើម្បី copy ឆ្លើយអតិថិជន:",
         "header_questions": f"{EMOJI_QUESTION} សួរអតិថិជន",
         "header_replies": f"{EMOJI_CHAT} ឆ្លើយអតិថិជន",
         "session_cleared": "លុប Session រួចរាល់",
@@ -57,7 +57,7 @@ STAFF_UI: dict[str, dict[str, str]] = {
         "back": "กลับ",
         "prompt_start": "🍒 CHERRY QUICK REPLY\n\nกรุณาเลือกภาษาพนักงาน:",
         "prompt_customer": "ภาษาพนักงาน: {staff}\n\nกรุณาเลือกภาษาลูกค้า:",
-        "prompt_main": "🍒 CHERRY QUICK REPLY\n\nกรุณาเลือกเมนู:",
+        "prompt_main": "🍒 CHERRY QUICK REPLY\n\nภาษาลูกค้า: {customer}\n\nกดปุ่มเพื่อ copy ข้อความตอบลูกค้า:",
         "header_questions": f"{EMOJI_QUESTION} ถามลูกค้า",
         "header_replies": f"{EMOJI_CHAT} ตอบลูกค้า",
         "session_cleared": "ล้าง Session แล้ว",
@@ -73,7 +73,7 @@ STAFF_UI: dict[str, dict[str, str]] = {
         "back": "Kembali",
         "prompt_start": "🍒 CHERRY QUICK REPLY\n\nPilih bahasa staff:",
         "prompt_customer": "Bahasa staff: {staff}\n\nPilih bahasa pelanggan:",
-        "prompt_main": "🍒 CHERRY QUICK REPLY\n\nPilih menu:",
+        "prompt_main": "🍒 CHERRY QUICK REPLY\n\nBahasa pelanggan: {customer}\n\nTekan tombol untuk copy balasan pelanggan:",
         "header_questions": f"{EMOJI_QUESTION} Tanya Pelanggan",
         "header_replies": f"{EMOJI_CHAT} Balas Pelanggan",
         "session_cleared": "Session dihapus",
@@ -147,17 +147,17 @@ LABEL_TO_EDIT_KEY: dict[str, str] = {}
 
 # ── Staff / customer language pickers ─────────────────────────────────────────
 STAFF_LANG_LABELS: dict[str, str] = {
-    "km": "🇰🇭 Khmer",
-    "th": "🇹🇭 Thai",
-    "id": "🇮🇩 Indonesian",
+    "km": "🇰🇭 Khmer Staff",
+    "th": "🇹🇭 Thai Staff",
+    "id": "🇮🇩 Indonesian Staff",
 }
 
 CUSTOMER_LANG_LABELS: dict[str, str] = {
-    "th": "🇹🇭 Thai",
-    "en": "🇬🇧 English",
-    "km": "🇰🇭 Khmer",
-    "id": "🇮🇩 Indonesian",
-    "cn": "🇨🇳 Chinese",
+    "th": "🇹🇭 Thai Customer",
+    "en": "🇬🇧 English Customer",
+    "km": "🇰🇭 Khmer Customer",
+    "id": "🇮🇩 Indonesian Customer",
+    "cn": "🇨🇳 Chinese Customer",
 }
 
 STAFF_LANG_ORDER = ["km", "th", "id"]
@@ -401,22 +401,14 @@ def is_reply_management_main_label(text: str) -> bool:
 
 def main_menu_action(text: str) -> str | None:
     raw = str(text or "").strip()
-    if is_reply_management_main_label(raw):
-        return "reply_management"
     if raw == BTN_STAFF_MGMT or raw == BTN_STAFF_MGMT_LEGACY:
         return "staff_management"
     action_keys = (
-        "menu_questions",
-        "menu_replies",
-        "menu_status",
         "menu_change_customer",
         "menu_change_staff",
         "menu_clear",
     )
     action_map = {
-        "menu_questions": "questions",
-        "menu_replies": "replies",
-        "menu_status": "status",
         "menu_change_customer": "change_customer",
         "menu_change_staff": "change_staff",
         "menu_clear": "clear",
@@ -472,31 +464,63 @@ def _rows_one_per_label(labels: list[str], staff_lang: str) -> list[list[str]]:
     return rows
 
 
+def unified_reply_key_order() -> list[str]:
+    reply_keys = set(get_quick_replies().keys())
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for key in REPLY_KEY_ORDER + STATUS_KEY_ORDER:
+        if key in reply_keys and key not in seen:
+            seen.add(key)
+            ordered.append(key)
+    return ordered
+
+
+def unified_button_specs(staff_lang: str) -> list[tuple[str, str | None]]:
+    from reply_button_store import button_custom_emoji_id
+
+    lang = normalize_staff_lang(staff_lang)
+    specs: list[tuple[str, str | None]] = []
+    for key in unified_reply_key_order():
+        label = REPLY_BUTTONS[lang].get(key) or STATUS_BUTTONS[lang].get(key)
+        if not label:
+            continue
+        emoji_id = button_custom_emoji_id(key, lang)
+        text = keyboard_button_display_text(key, label, custom_emoji_id=emoji_id)
+        specs.append((text, emoji_id))
+    return specs
+
+
+def staff_quick_reply_keyboard_rows(
+    staff_lang: str,
+    *,
+    show_staff_management: bool = False,
+) -> list[list[tuple[str, str | None]]]:
+    lang = normalize_staff_lang(staff_lang)
+    ui = STAFF_UI[lang]
+    specs = unified_button_specs(staff_lang)
+    rows = [specs[i : i + 2] for i in range(0, len(specs), 2)]
+    rows.append([(ui["menu_change_staff"], None), (ui["menu_change_customer"], None)])
+    rows.append([(ui["menu_clear"], None)])
+    if show_staff_management:
+        rows.append([(BTN_STAFF_MGMT, None)])
+    return rows
+
+
 def main_menu_rows(
     staff_lang: str,
     *,
     show_reply_management: bool = False,
     show_staff_management: bool = False,
 ) -> list[list[str]]:
+    """Legacy string rows for tests — toolbar only (no reply buttons)."""
     lang = normalize_staff_lang(staff_lang)
     ui = STAFF_UI[lang]
-    rows: list[list[str]] = []
-    row1 = [ui["menu_questions"], ui["menu_replies"]]
-    if STATUS_KEY_ORDER:
-        row1.append(ui["menu_status"])
-    rows.append(row1)
-
-    if show_reply_management or show_staff_management:
-        admin_row: list[str] = []
-        if show_reply_management:
-            admin_row.append(BTN_REPLY_MGMT)
-        if show_staff_management:
-            admin_row.append(BTN_STAFF_MGMT)
-        if admin_row:
-            rows.append(admin_row)
-
-    rows.append([ui["menu_change_customer"], ui["menu_change_staff"]])
-    rows.append([ui["menu_clear"]])
+    rows: list[list[str]] = [
+        [ui["menu_change_staff"], ui["menu_change_customer"]],
+        [ui["menu_clear"]],
+    ]
+    if show_staff_management:
+        rows.append([BTN_STAFF_MGMT])
     return rows
 
 
@@ -643,6 +667,13 @@ def reply_menu_rows(staff_lang: str) -> list[list[str]]:
 
 def status_menu_rows(staff_lang: str) -> list[list[str]]:
     return _rows_one_per_label(_category_keyboard_labels(staff_lang, "status"), normalize_staff_lang(staff_lang))
+
+
+def parse_quick_reply_key(text: str) -> str | None:
+    key = parse_reply_label(text)
+    if key:
+        return key
+    return parse_status_label(text)
 
 
 def parse_question_label(text: str) -> str | None:
