@@ -411,7 +411,7 @@ def is_main_menu_label(text: str) -> bool:
 
 
 def _rows_one_per_label(labels: list[str], staff_lang: str) -> list[list[str]]:
-    rows = [[label] for label in labels]
+    rows = [labels[i : i + 2] for i in range(0, len(labels), 2)]
     rows.append([back_button(staff_lang)])
     return rows
 
