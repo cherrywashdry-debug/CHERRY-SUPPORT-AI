@@ -28,13 +28,16 @@ from quick_replies import (
     BTN_REPLY_MGMT,
     BTN_STAFF_MGMT,
     CUSTOMER_LANG_LABELS,
+    CUSTOMER_LANG_ORDER,
     DEFAULT_CUSTOMER_LANG,
     DEFAULT_STAFF_LANG,
     OWNER_ACCESS_DENIED,
     STAFF_LANG_LABELS,
+    STAFF_LANG_ORDER,
     customer_lang_from_label,
     is_back_button,
     is_main_menu_label,
+    lang_picker_rows,
     main_menu_action,
     main_menu_rows,
     parse_question_label,
@@ -72,7 +75,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - FIXED-V3.4"
+VERSION = "CHERRY QUICK REPLY - FIXED-V3.6"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -206,17 +209,11 @@ def keyboard(rows: list[list[str]], *, resize: bool = True) -> ReplyKeyboardMark
 
 
 def staff_lang_keyboard() -> ReplyKeyboardMarkup:
-    return keyboard([[STAFF_LANG_LABELS["km"]], [STAFF_LANG_LABELS["th"]], [STAFF_LANG_LABELS["id"]]])
+    return keyboard(lang_picker_rows(STAFF_LANG_LABELS, STAFF_LANG_ORDER))
 
 
 def customer_lang_keyboard() -> ReplyKeyboardMarkup:
-    return keyboard(
-        [
-            [CUSTOMER_LANG_LABELS["th"], CUSTOMER_LANG_LABELS["en"]],
-            [CUSTOMER_LANG_LABELS["km"], CUSTOMER_LANG_LABELS["id"]],
-            [CUSTOMER_LANG_LABELS["cn"]],
-        ]
-    )
+    return keyboard(lang_picker_rows(CUSTOMER_LANG_LABELS, CUSTOMER_LANG_ORDER))
 
 
 def staff_lang_name(code: str) -> str:

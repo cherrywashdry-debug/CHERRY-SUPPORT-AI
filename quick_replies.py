@@ -142,18 +142,27 @@ LABEL_TO_EDIT_KEY: dict[str, str] = {}
 
 # ── Staff / customer language pickers ─────────────────────────────────────────
 STAFF_LANG_LABELS: dict[str, str] = {
-    "km": "🇰🇭 Khmer Staff",
-    "th": "🇹🇭 Thai Staff",
-    "id": "🇮🇩 Indonesian Staff",
+    "km": "🇰🇭 Khmer",
+    "th": "🇹🇭 Thai",
+    "id": "🇮🇩 Indonesian",
 }
 
 CUSTOMER_LANG_LABELS: dict[str, str] = {
-    "th": "🇹🇭 Thai Customer",
-    "en": "🇬🇧 English Customer",
-    "km": "🇰🇭 Khmer Customer",
-    "id": "🇮🇩 Indonesian Customer",
-    "cn": "🇨🇳 Chinese Customer",
+    "th": "🇹🇭 Thai",
+    "en": "🇬🇧 English",
+    "km": "🇰🇭 Khmer",
+    "id": "🇮🇩 Indonesian",
+    "cn": "🇨🇳 Chinese",
 }
+
+STAFF_LANG_ORDER = ["km", "th", "id"]
+CUSTOMER_LANG_ORDER = ["th", "en", "km", "id", "cn"]
+
+
+def lang_picker_rows(labels: dict[str, str], order: list[str]) -> list[list[str]]:
+    """Two buttons per row so labels stay readable on mobile."""
+    flat = [labels[code] for code in order]
+    return [flat[i : i + 2] for i in range(0, len(flat), 2)]
 
 # ── Question texts for customer ───────────────────────────────────────────────
 def _customer_langs(
@@ -415,19 +424,24 @@ def main_menu_rows(
 ) -> list[list[str]]:
     lang = normalize_staff_lang(staff_lang)
     ui = STAFF_UI[lang]
+    rows: list[list[str]] = []
     row1 = [ui["menu_questions"], ui["menu_replies"]]
     if STATUS_KEY_ORDER:
         row1.append(ui["menu_status"])
+    rows.append(row1)
+
     if show_reply_management or show_staff_management:
-        row2: list[str] = []
+        admin_row: list[str] = []
         if show_reply_management:
-            row2.append(BTN_REPLY_MGMT)
+            admin_row.append(BTN_REPLY_MGMT)
         if show_staff_management:
-            row2.append(BTN_STAFF_MGMT)
-        row2.extend([ui["menu_change_customer"], ui["menu_change_staff"], ui["menu_clear"]])
-    else:
-        row2 = [ui["menu_change_customer"], ui["menu_change_staff"], ui["menu_clear"]]
-    return [row1, row2]
+            admin_row.append(BTN_STAFF_MGMT)
+        if admin_row:
+            rows.append(admin_row)
+
+    rows.append([ui["menu_change_customer"], ui["menu_change_staff"]])
+    rows.append([ui["menu_clear"]])
+    return rows
 
 
 def admin_reply_mgmt_menu_rows(staff_lang: str) -> list[list[str]]:
