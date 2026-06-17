@@ -5,7 +5,7 @@ import logging
 import re
 from typing import Any
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity, ReplyKeyboardRemove, Update
 from telegram.ext import ContextTypes
 
 from quick_replies import (
@@ -14,6 +14,7 @@ from quick_replies import (
     BTN_ADMIN_DELETE,
     BTN_ADMIN_EDIT,
     BTN_ADMIN_EDIT_BUTTON,
+    BTN_ADMIN_SET_EMOJI,
     BTN_ADMIN_SET_IMAGE,
     BTN_EDIT_REPLIES_LEGACY,
     BTN_REPLY_MGMT,
@@ -42,9 +43,11 @@ from reply_button_store import (
     CATEGORIES,
     add_button_mapping,
     all_managed_keys,
+    button_custom_emoji_id,
     button_label,
     key_category,
     remove_button_mapping,
+    update_button_custom_emoji_id,
     update_button_label,
 )
 from reply_image_store import backup_images_file, remove_image, save_image
@@ -63,6 +66,8 @@ SCREEN_ADMIN_EDIT_LANG = "admin_edit_lang"
 SCREEN_ADMIN_DELETE_KEYS = "admin_delete_keys"
 SCREEN_ADMIN_EDIT_BUTTON_KEYS = "admin_edit_button_keys"
 SCREEN_ADMIN_EDIT_BUTTON_LANG = "admin_edit_button_lang"
+SCREEN_ADMIN_EMOJI_KEYS = "admin_emoji_keys"
+SCREEN_ADMIN_EMOJI_LANG = "admin_emoji_lang"
 SCREEN_ADMIN_IMAGE_KEYS = "admin_image_keys"
 SCREEN_ADMIN_IMAGE_LANG = "admin_image_lang"
 
@@ -73,6 +78,8 @@ ADMIN_SCREENS = (
     SCREEN_ADMIN_DELETE_KEYS,
     SCREEN_ADMIN_EDIT_BUTTON_KEYS,
     SCREEN_ADMIN_EDIT_BUTTON_LANG,
+    SCREEN_ADMIN_EMOJI_KEYS,
+    SCREEN_ADMIN_EMOJI_LANG,
     SCREEN_ADMIN_IMAGE_KEYS,
     SCREEN_ADMIN_IMAGE_LANG,
 )
@@ -85,6 +92,16 @@ CAT_LABEL_TO_ID = {
     "🚚 Status Updates": "status_updates",
 }
 CAT_ID_TO_LABEL = {v: k for k, v in CAT_LABEL_TO_ID.items()}
+
+
+def extract_custom_emoji_id(message: Any) -> str | None:
+    entities = getattr(message, "entities", None) or getattr(message, "caption_entities", None)
+    if not entities:
+        return None
+    for entity in entities:
+        if entity.type == MessageEntity.CUSTOM_EMOJI and entity.custom_emoji_id:
+            return str(entity.custom_emoji_id)
+    return None
 
 
 def clear_admin_state(context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -223,6 +240,74 @@ async def prompt_admin_edit_button_label(
     await message.reply_text(
         f"Current button label ({staff_lang}):\n\n{current}\n\n"
         "Send new button label now.\nExample: 🚚 /ค่าจัดส่ง\nSend /cancel to cancel.",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
+async def send_admin_emoji_keys_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    if not message or not _owner_only(update):
+        if message:
+            await message.reply_text(OWNER_ACCESS_DENIED)
+        return
+    context.user_data[ADMIN_MODE] = "set_emoji"
+    context.user_data.pop(ADMIN_AWAITING, None)
+    context.user_data.pop(ADMIN_DRAFT, None)
+    _set_screen(context, SCREEN_ADMIN_EMOJI_KEYS)
+    from app import get_staff_lang, keyboard
+
+    staff = get_staff_lang(context)
+    await message.reply_text(
+        "✨ Set Premium Emoji\n\nSelect button key:",
+        reply_markup=keyboard(admin_button_key_menu_rows(staff)),
+    )
+
+
+async def send_admin_emoji_lang_menu(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    reply_key: str,
+) -> None:
+    message = update.effective_message
+    if not message:
+        return
+    context.user_data[ADMIN_DRAFT] = {"key": reply_key}
+    context.user_data.pop(ADMIN_AWAITING, None)
+    _set_screen(context, SCREEN_ADMIN_EMOJI_LANG)
+    from app import keyboard
+
+    await message.reply_text(
+        "Choose staff language for this premium emoji:",
+        reply_markup=keyboard(edit_staff_lang_menu_rows()),
+    )
+
+
+async def prompt_admin_emoji_input(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    reply_key: str,
+    staff_lang: str,
+) -> None:
+    message = update.effective_message
+    if not message:
+        return
+    draft = dict(context.user_data.get(ADMIN_DRAFT) or {})
+    draft.update({"key": reply_key, "staff_lang": staff_lang})
+    context.user_data[ADMIN_DRAFT] = draft
+    context.user_data[ADMIN_AWAITING] = "emoji_wait_input"
+    current = button_custom_emoji_id(reply_key, staff_lang)
+    current_label = button_label(reply_key, staff_lang) or "(none)"
+    status = f"Current emoji ID: {current}" if current else "No premium emoji set yet."
+    await message.reply_text(
+        "✨ Set Premium Emoji\n\n"
+        f"Key: {reply_key}\n"
+        f"Staff language: {staff_lang}\n"
+        f"Label: {current_label}\n"
+        f"{status}\n\n"
+        "Send ONE premium emoji from Telegram,\n"
+        "or paste the numeric emoji ID.\n"
+        "Send /remove to clear.\n"
+        "Send /cancel to cancel.",
         reply_markup=ReplyKeyboardRemove(),
     )
 
@@ -573,6 +658,59 @@ async def handle_admin_text(
         await send_main_menu(update, context)
         return True
 
+    if awaiting == "emoji_wait_input":
+        reply_key = str(draft.get("key", ""))
+        staff_lang = str(draft.get("staff_lang", ""))
+        if not key_category(reply_key) or staff_lang not in EDIT_STAFF_LANG_LABELS:
+            clear_admin_state(context)
+            from app import send_main_menu
+
+            await send_main_menu(update, context)
+            return True
+
+        emoji_id: str | None
+        if raw.strip().lower() == "/remove":
+            emoji_id = None
+        else:
+            emoji_id = extract_custom_emoji_id(message)
+            if emoji_id is None and raw.strip().isdigit():
+                emoji_id = raw.strip()
+            if emoji_id is None:
+                await message.reply_text(
+                    "Could not read premium emoji.\n"
+                    "Send one premium emoji, paste numeric ID, or /remove.\n"
+                    "Send /cancel to cancel.",
+                )
+                return True
+
+        try:
+            update_button_custom_emoji_id(reply_key, staff_lang, emoji_id, backup=True)
+            refresh_button_maps()
+        except Exception as exc:
+            logger.exception("set premium emoji failed")
+            await message.reply_text(f"Save failed: {exc}\nPrevious setting kept.")
+            return True
+
+        clear_admin_state(context)
+        if emoji_id:
+            await message.reply_text(
+                "✅ Premium emoji saved.\n"
+                f"Key: {reply_key}\n"
+                f"Staff language: {staff_lang}\n"
+                f"Emoji ID: {emoji_id}\n\n"
+                "Note: visible only if bot owner has Telegram Premium.",
+            )
+        else:
+            await message.reply_text(
+                "✅ Premium emoji removed.\n"
+                f"Key: {reply_key}\n"
+                f"Staff language: {staff_lang}",
+            )
+        from app import send_main_menu
+
+        await send_main_menu(update, context)
+        return True
+
     if awaiting == "image_wait_photo" and raw.strip().lower() == "/remove":
         reply_key = str(draft.get("key", ""))
         lang = str(draft.get("lang", ""))
@@ -690,6 +828,7 @@ async def handle_reply_mgmt_screen(
         owner_actions = (
             BTN_ADMIN_EDIT,
             BTN_ADMIN_EDIT_BUTTON,
+            BTN_ADMIN_SET_EMOJI,
             BTN_ADMIN_SET_IMAGE,
             BTN_ADMIN_ADD,
             BTN_ADMIN_DELETE,
@@ -703,6 +842,9 @@ async def handle_reply_mgmt_screen(
             return True
         if raw == BTN_ADMIN_EDIT_BUTTON:
             await send_admin_edit_button_keys_menu(update, context)
+            return True
+        if raw == BTN_ADMIN_SET_EMOJI:
+            await send_admin_emoji_keys_menu(update, context)
             return True
         if raw == BTN_ADMIN_SET_IMAGE:
             await send_admin_image_keys_menu(update, context)
@@ -760,6 +902,27 @@ async def handle_reply_mgmt_screen(
             await prompt_admin_edit_button_label(update, context, reply_key, staff_lang)
             return True
         await send_admin_edit_button_lang_menu(update, context, reply_key)
+        return True
+
+    if screen == SCREEN_ADMIN_EMOJI_KEYS:
+        if raw in (BTN_ADMIN_BACK, back_button(staff)):
+            await send_reply_mgmt_menu(update, context)
+            return True
+        btn_key = parse_admin_button_key(raw)
+        if btn_key and key_category(btn_key):
+            await send_admin_emoji_lang_menu(update, context, btn_key)
+            return True
+        await send_admin_emoji_keys_menu(update, context)
+        return True
+
+    if screen == SCREEN_ADMIN_EMOJI_LANG:
+        staff_lang = parse_edit_staff_lang(raw)
+        draft = dict(context.user_data.get(ADMIN_DRAFT) or {})
+        reply_key = str(draft.get("key", ""))
+        if staff_lang and key_category(reply_key):
+            await prompt_admin_emoji_input(update, context, reply_key, staff_lang)
+            return True
+        await send_admin_emoji_lang_menu(update, context, reply_key)
         return True
 
     if screen == SCREEN_ADMIN_IMAGE_KEYS:

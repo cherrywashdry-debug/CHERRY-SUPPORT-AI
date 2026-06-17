@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -35,6 +35,7 @@ from quick_replies import (
     OWNER_ACCESS_DENIED,
     STAFF_LANG_LABELS,
     STAFF_LANG_ORDER,
+    category_menu_button_rows,
     customer_lang_from_label,
     is_back_button,
     is_main_menu_label,
@@ -76,7 +77,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - FIXED-V3.9"
+VERSION = "CHERRY QUICK REPLY - FIXED-V4.0"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -209,14 +210,30 @@ def keyboard(rows: list[list[str]], *, resize: bool = True) -> ReplyKeyboardMark
     return ReplyKeyboardMarkup(rows, resize_keyboard=resize)
 
 
+def keyboard_button(text: str, *, custom_emoji_id: str | None = None) -> KeyboardButton | str:
+    if custom_emoji_id:
+        return KeyboardButton(text=text, icon_custom_emoji_id=custom_emoji_id)
+    return text
+
+
+def keyboard_from_specs(
+    spec_rows: list[list[tuple[str, str | None]]],
+    *,
+    resize: bool = True,
+) -> ReplyKeyboardMarkup:
+    rows: list[list[KeyboardButton | str]] = [
+        [keyboard_button(text, custom_emoji_id=emoji_id) for text, emoji_id in row]
+        for row in spec_rows
+    ]
+    return ReplyKeyboardMarkup(rows, resize_keyboard=resize)
+
+
 def category_menu_keyboard(staff_lang: str, category: str) -> ReplyKeyboardMarkup:
-    if category == "questions":
-        rows = question_menu_rows(staff_lang)
-    elif category == "replies":
-        rows = reply_menu_rows(staff_lang)
-    else:
-        rows = status_menu_rows(staff_lang)
-    return keyboard(rows, resize=False)
+    from quick_replies import back_button, normalize_staff_lang
+
+    rows = category_menu_button_rows(staff_lang, category)
+    rows.append([(back_button(normalize_staff_lang(staff_lang)), None)])
+    return keyboard_from_specs(rows, resize=False)
 
 
 def staff_lang_keyboard() -> ReplyKeyboardMarkup:

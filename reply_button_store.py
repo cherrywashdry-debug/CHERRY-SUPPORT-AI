@@ -45,6 +45,38 @@ def _empty_category() -> dict[str, Any]:
     }
 
 
+def _normalize_emoji_id(value: Any) -> str | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    if not raw.isdigit():
+        raise ValueError(f"custom_emoji_id must be numeric: {raw!r}")
+    return raw
+
+
+def _validate_custom_emoji_ids(data: Any) -> dict[str, dict[str, str]]:
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ValueError("custom_emoji_ids must be a JSON object")
+    out: dict[str, dict[str, str]] = {}
+    for key, langs in data.items():
+        if not isinstance(langs, dict):
+            raise ValueError(f"custom_emoji_ids.{key} must be an object")
+        norm_langs: dict[str, str] = {}
+        for lang in STAFF_LANGS:
+            if lang not in langs:
+                continue
+            emoji_id = _normalize_emoji_id(langs.get(lang))
+            if emoji_id:
+                norm_langs[lang] = emoji_id
+        if norm_langs:
+            out[str(key)] = norm_langs
+    return out
+
+
 def _validate_config(data: Any) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("quick_reply_buttons.json must be a JSON object")
@@ -75,7 +107,10 @@ def _validate_config(data: Any) -> dict[str, Any]:
                 if key not in norm_buttons[lang]:
                     raise ValueError(f"missing button label {cat}/{lang}/{key}")
         out_cats[cat] = {"key_order": list(key_order), "buttons": norm_buttons}
-    return {"categories": out_cats}
+    return {
+        "categories": out_cats,
+        "custom_emoji_ids": _validate_custom_emoji_ids(data.get("custom_emoji_ids")),
+    }
 
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
@@ -196,6 +231,8 @@ def remove_button_mapping(key: str) -> None:
     for lang in STAFF_LANGS:
         cat["buttons"][lang].pop(key, None)
 
+    updated.setdefault("custom_emoji_ids", {}).pop(key, None)
+
     try:
         _write_json(JSON_PATH, updated)
     except Exception:
@@ -243,3 +280,54 @@ def update_button_label(key: str, staff_lang: str, label: str, *, backup: bool =
     global _cache
     _cache = _validate_config(updated)
     logger.info("Updated button label key=%s lang=%s", key, lang)
+
+
+def button_custom_emoji_id(key: str, staff_lang: str) -> str | None:
+    lang = staff_lang if staff_lang in STAFF_LANGS else "km"
+    cfg = load_button_config()
+    return cfg.get("custom_emoji_ids", {}).get(key, {}).get(lang)
+
+
+def update_button_custom_emoji_id(
+    key: str,
+    staff_lang: str,
+    emoji_id: str | None,
+    *,
+    backup: bool = True,
+) -> None:
+    category = key_category(key)
+    if category is None:
+        raise ValueError(f"unknown button key: {key}")
+    lang = str(staff_lang).strip().lower()
+    if lang not in STAFF_LANGS:
+        raise ValueError(f"unsupported staff language: {staff_lang}")
+
+    normalized = _normalize_emoji_id(emoji_id)
+
+    cfg = load_button_config()
+    if backup:
+        backup_buttons_file()
+
+    updated = json.loads(json.dumps(cfg))
+    emoji_map = updated.setdefault("custom_emoji_ids", {})
+    per_key = dict(emoji_map.get(key, {}))
+
+    if normalized:
+        per_key[lang] = normalized
+        emoji_map[key] = per_key
+    else:
+        per_key.pop(lang, None)
+        if per_key:
+            emoji_map[key] = per_key
+        else:
+            emoji_map.pop(key, None)
+
+    try:
+        _write_json(JSON_PATH, updated)
+    except Exception:
+        raise
+
+    global _cache
+    _cache = _validate_config(updated)
+    action = "set" if normalized else "cleared"
+    logger.info("Custom emoji %s key=%s lang=%s", action, key, lang)

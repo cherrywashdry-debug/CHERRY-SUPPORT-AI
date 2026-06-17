@@ -98,6 +98,7 @@ KEYBOARD_LABEL_MAX_LEN = 20
 
 BTN_ADMIN_EDIT = "✏️ Edit Reply"
 BTN_ADMIN_EDIT_BUTTON = "🏷️ Edit Button"
+BTN_ADMIN_SET_EMOJI = "✨ Set Premium Emoji"
 BTN_ADMIN_SET_IMAGE = "🖼️ Set Reply Image"
 BTN_ADMIN_ADD = "➕ Add Reply"
 BTN_ADMIN_DELETE = "➖ Delete Reply"
@@ -274,6 +275,17 @@ def _register_command(cmd_map: dict[str, str], label: str, key: str) -> None:
         cmd_map[token] = key
 
 
+def keyboard_button_display_text(key: str, full_label: str, *, custom_emoji_id: str | None) -> str:
+    if custom_emoji_id:
+        parts = full_label.strip().split(None, 1)
+        text = parts[1].strip() if len(parts) > 1 else full_label.strip()
+        if len(text) > KEYBOARD_LABEL_MAX_LEN:
+            return text[:KEYBOARD_LABEL_MAX_LEN]
+        if text:
+            return text
+    return keyboard_button_label(key, full_label)
+
+
 def keyboard_button_label(key: str, full_label: str) -> str:
     """Short label for bottom Reply Keyboard — two buttons per row on mobile."""
     parts = full_label.strip().split(None, 1)
@@ -307,6 +319,8 @@ def _load_button_maps() -> None:
     global LABEL_TO_QUESTION_KEY, LABEL_TO_REPLY_KEY, LABEL_TO_STATUS_KEY
     global COMMAND_TO_QUESTION_KEY, COMMAND_TO_REPLY_KEY, COMMAND_TO_STATUS_KEY
 
+    from reply_button_store import button_custom_emoji_id, load_button_config
+
     load_button_config()
     QUESTION_KEY_ORDER = category_key_order("questions_to_customer")
     REPLY_KEY_ORDER = category_key_order("replies_to_customer")
@@ -333,6 +347,10 @@ def _load_button_maps() -> None:
             kb_label = keyboard_button_label(key, label)
             _register_command(LABEL_TO_QUESTION_KEY, kb_label, key)
             _register_command(COMMAND_TO_QUESTION_KEY, kb_label, key)
+            emoji_id = button_custom_emoji_id(key, _lang)
+            display = keyboard_button_display_text(key, label, custom_emoji_id=emoji_id)
+            _register_command(LABEL_TO_QUESTION_KEY, display, key)
+            _register_command(COMMAND_TO_QUESTION_KEY, display, key)
 
     for _lang, buttons in REPLY_BUTTONS.items():
         for key, label in buttons.items():
@@ -341,6 +359,10 @@ def _load_button_maps() -> None:
             kb_label = keyboard_button_label(key, label)
             _register_command(LABEL_TO_REPLY_KEY, kb_label, key)
             _register_command(COMMAND_TO_REPLY_KEY, kb_label, key)
+            emoji_id = button_custom_emoji_id(key, _lang)
+            display = keyboard_button_display_text(key, label, custom_emoji_id=emoji_id)
+            _register_command(LABEL_TO_REPLY_KEY, display, key)
+            _register_command(COMMAND_TO_REPLY_KEY, display, key)
 
     for _lang, buttons in STATUS_BUTTONS.items():
         for key, label in buttons.items():
@@ -349,6 +371,10 @@ def _load_button_maps() -> None:
             kb_label = keyboard_button_label(key, label)
             _register_command(LABEL_TO_STATUS_KEY, kb_label, key)
             _register_command(COMMAND_TO_STATUS_KEY, kb_label, key)
+            emoji_id = button_custom_emoji_id(key, _lang)
+            display = keyboard_button_display_text(key, label, custom_emoji_id=emoji_id)
+            _register_command(LABEL_TO_STATUS_KEY, display, key)
+            _register_command(COMMAND_TO_STATUS_KEY, display, key)
 
 
 def refresh_button_maps() -> None:
@@ -478,7 +504,7 @@ def admin_reply_mgmt_menu_rows(staff_lang: str) -> list[list[str]]:
     lang = normalize_staff_lang(staff_lang)
     return [
         [BTN_ADMIN_EDIT],
-        [BTN_ADMIN_EDIT_BUTTON],
+        [BTN_ADMIN_EDIT_BUTTON, BTN_ADMIN_SET_EMOJI],
         [BTN_ADMIN_SET_IMAGE],
         [BTN_ADMIN_ADD],
         [BTN_ADMIN_DELETE],
@@ -566,6 +592,34 @@ def parse_edit_lang(text: str) -> str | None:
 
 def edit_lang_display(code: str) -> str:
     return EDIT_LANG_LABELS.get(normalize_customer_lang(code), code)
+
+
+def _category_button_specs(staff_lang: str, category: str) -> list[tuple[str, str | None]]:
+    from reply_button_store import button_custom_emoji_id
+
+    lang = normalize_staff_lang(staff_lang)
+    if category == "questions":
+        order, buttons = QUESTION_KEY_ORDER, QUESTION_BUTTONS[lang]
+    elif category == "replies":
+        order, buttons = REPLY_KEY_ORDER, REPLY_BUTTONS[lang]
+    else:
+        order, buttons = STATUS_KEY_ORDER, STATUS_BUTTONS[lang]
+
+    specs: list[tuple[str, str | None]] = []
+    for key in order:
+        if key not in buttons:
+            continue
+        label = buttons[key]
+        emoji_id = button_custom_emoji_id(key, lang)
+        text = keyboard_button_display_text(key, label, custom_emoji_id=emoji_id)
+        specs.append((text, emoji_id))
+    return specs
+
+
+def category_menu_button_rows(staff_lang: str, category: str) -> list[list[tuple[str, str | None]]]:
+    specs = _category_button_specs(staff_lang, category)
+    rows = [specs[i : i + 2] for i in range(0, len(specs), 2)]
+    return rows
 
 
 def _category_keyboard_labels(staff_lang: str, category: str) -> list[str]:
