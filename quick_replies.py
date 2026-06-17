@@ -538,6 +538,17 @@ def edit_lang_display(code: str) -> str:
     return EDIT_LANG_LABELS.get(normalize_customer_lang(code), code)
 
 
+def category_key_labels(staff_lang: str, category: str) -> list[tuple[str, str]]:
+    lang = normalize_staff_lang(staff_lang)
+    if category == "questions":
+        order, buttons = QUESTION_KEY_ORDER, QUESTION_BUTTONS[lang]
+    elif category == "replies":
+        order, buttons = REPLY_KEY_ORDER, REPLY_BUTTONS[lang]
+    else:
+        order, buttons = STATUS_KEY_ORDER, STATUS_BUTTONS[lang]
+    return [(key, buttons[key]) for key in order if key in buttons]
+
+
 def question_menu_rows(staff_lang: str) -> list[list[str]]:
     lang = normalize_staff_lang(staff_lang)
     labels = [QUESTION_BUTTONS[lang][key] for key in QUESTION_KEY_ORDER]
