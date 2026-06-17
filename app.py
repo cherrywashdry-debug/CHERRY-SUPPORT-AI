@@ -26,6 +26,7 @@ from telegram.ext import (
 from quick_replies import (
     BTN_EDIT_REPLIES_LEGACY,
     BTN_REPLY_MGMT,
+    BTN_REPLY_MGMT_LEGACY,
     BTN_STAFF_MGMT,
     CUSTOMER_LANG_LABELS,
     CUSTOMER_LANG_ORDER,
@@ -34,8 +35,6 @@ from quick_replies import (
     OWNER_ACCESS_DENIED,
     STAFF_LANG_LABELS,
     STAFF_LANG_ORDER,
-    back_button,
-    category_key_labels,
     customer_lang_from_label,
     is_back_button,
     is_main_menu_label,
@@ -77,7 +76,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - FIXED-V3.8"
+VERSION = "CHERRY QUICK REPLY - FIXED-V3.9"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -210,27 +209,14 @@ def keyboard(rows: list[list[str]], *, resize: bool = True) -> ReplyKeyboardMark
     return ReplyKeyboardMarkup(rows, resize_keyboard=resize)
 
 
-def category_inline_keyboard(
-    pairs: list[tuple[str, str]],
-    *,
-    kind: str,
-    back_label: str,
-) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
-    for index in range(0, len(pairs), 2):
-        chunk = pairs[index : index + 2]
-        rows.append(
-            [
-                InlineKeyboardButton(text=label, callback_data=f"qr:{kind}:{key}")
-                for key, label in chunk
-            ]
-        )
-    rows.append([InlineKeyboardButton(text=back_label, callback_data="qr:back:main")])
-    return InlineKeyboardMarkup(rows)
-
-
-def back_only_keyboard(staff_lang: str) -> ReplyKeyboardMarkup:
-    return keyboard([[back_button(staff_lang)]], resize=False)
+def category_menu_keyboard(staff_lang: str, category: str) -> ReplyKeyboardMarkup:
+    if category == "questions":
+        rows = question_menu_rows(staff_lang)
+    elif category == "replies":
+        rows = reply_menu_rows(staff_lang)
+    else:
+        rows = status_menu_rows(staff_lang)
+    return keyboard(rows, resize=False)
 
 
 def staff_lang_keyboard() -> ReplyKeyboardMarkup:
@@ -412,7 +398,6 @@ async def send_category_menu(
     *,
     screen: str,
     category: str,
-    kind: str,
     header_key: str,
 ) -> None:
     message = update.effective_message
@@ -420,14 +405,9 @@ async def send_category_menu(
         return
     set_active_screen(context, screen)
     staff = get_staff_lang(context)
-    pairs = category_key_labels(staff, category)
     await message.reply_text(
         staff_ui(staff, header_key),
-        reply_markup=category_inline_keyboard(
-            pairs,
-            kind=kind,
-            back_label=back_button(staff),
-        ),
+        reply_markup=category_menu_keyboard(staff, category),
     )
 
 
@@ -437,7 +417,6 @@ async def send_questions_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
         context,
         screen=SCREEN_QUESTIONS,
         category="questions",
-        kind="q",
         header_key="header_questions",
     )
 
@@ -448,7 +427,6 @@ async def send_replies_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         context,
         screen=SCREEN_REPLIES,
         category="replies",
-        kind="r",
         header_key="header_replies",
     )
 
@@ -459,7 +437,6 @@ async def send_status_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         context,
         screen=SCREEN_STATUS,
         category="status",
-        kind="s",
         header_key="menu_status",
     )
 
@@ -793,7 +770,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     # Main menu entry: Reply Management (new label + legacy cached "Edit Replies" keyboard)
-    if raw in (BTN_REPLY_MGMT, BTN_EDIT_REPLIES_LEGACY):
+    if raw in (BTN_REPLY_MGMT, BTN_REPLY_MGMT_LEGACY, BTN_EDIT_REPLIES_LEGACY):
         await send_reply_mgmt_menu(update, context)
         return
 
@@ -868,7 +845,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         staff = get_staff_lang(context)
         await message.reply_text(
             answer,
-            reply_markup=back_only_keyboard(staff),
+            reply_markup=category_menu_keyboard(staff, "questions"),
         )
         return
 
@@ -882,7 +859,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             update,
             context,
             r_key,
-            reply_markup=back_only_keyboard(staff),
+            reply_markup=category_menu_keyboard(staff, "replies"),
         )
         return
 
@@ -896,7 +873,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             update,
             context,
             s_key,
-            reply_markup=back_only_keyboard(staff),
+            reply_markup=category_menu_keyboard(staff, "status"),
         )
         return
 
@@ -970,76 +947,6 @@ def build_persistence() -> PicklePersistence:
     return PicklePersistence(filepath=str(STATE_PATH))
 
 
-async def handle_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    if not query or not query.data:
-        return
-    if await deny_if_not_staff(update):
-        await query.answer()
-        return
-    if not await ensure_ready_for_main(update, context):
-        await query.answer()
-        return
-
-    data = query.data
-    if not data.startswith("qr:"):
-        await query.answer()
-        return
-
-    message = query.message
-    if not message:
-        await query.answer()
-        return
-
-    payload = data[3:]
-    if payload == "back:main":
-        await query.answer()
-        set_active_screen(context, SCREEN_MAIN)
-        staff = get_staff_lang(context)
-        await context.bot.send_message(
-            chat_id=message.chat_id,
-            text=staff_ui(staff, "prompt_main"),
-            reply_markup=build_main_menu_keyboard(staff, is_owner_user=is_owner(update)),
-        )
-        return
-
-    kind, _, key = payload.partition(":")
-    if not key:
-        await query.answer()
-        return
-
-    await query.answer()
-    staff = get_staff_lang(context)
-
-    if kind == "q":
-        set_active_screen(context, SCREEN_QUESTIONS)
-        answer = question_text(key, get_customer_lang(context))
-        await message.reply_text(answer, reply_markup=back_only_keyboard(staff))
-        return
-
-    if kind == "r":
-        set_active_screen(context, SCREEN_REPLIES)
-        await send_customer_quick_reply_message(
-            message,
-            context,
-            key,
-            reply_markup=back_only_keyboard(staff),
-        )
-        return
-
-    if kind == "s":
-        set_active_screen(context, SCREEN_STATUS)
-        await send_customer_quick_reply_message(
-            message,
-            context,
-            key,
-            reply_markup=back_only_keyboard(staff),
-        )
-        return
-
-    await query.answer()
-
-
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if await deny_if_not_staff(update):
         return
@@ -1070,7 +977,6 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("health", health_cmd))
     app.add_handler(CallbackQueryHandler(staff_access_callback, pattern=r"^staff:(approve|reject):\d+$"))
     app.add_handler(CallbackQueryHandler(admin_callback, pattern=r"^admin:"))
-    app.add_handler(CallbackQueryHandler(handle_category_callback, pattern=r"^qr:"))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.COMMAND, handle_text))

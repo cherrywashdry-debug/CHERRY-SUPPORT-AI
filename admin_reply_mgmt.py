@@ -17,6 +17,7 @@ from quick_replies import (
     BTN_ADMIN_SET_IMAGE,
     BTN_EDIT_REPLIES_LEGACY,
     BTN_REPLY_MGMT,
+    BTN_REPLY_MGMT_LEGACY,
     EDIT_LANG_LABELS,
     EDIT_STAFF_LANG_LABELS,
     OWNER_ACCESS_DENIED,
@@ -681,7 +682,7 @@ async def handle_reply_mgmt_screen(
     staff = get_staff_lang(context)
     screen = str(context.user_data.get("active_screen", ""))
 
-    if raw == BTN_REPLY_MGMT or raw == BTN_EDIT_REPLIES_LEGACY:
+    if raw in (BTN_REPLY_MGMT, BTN_REPLY_MGMT_LEGACY, BTN_EDIT_REPLIES_LEGACY):
         await send_reply_mgmt_menu(update, context)
         return True
 

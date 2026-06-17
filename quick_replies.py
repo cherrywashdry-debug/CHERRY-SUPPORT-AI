@@ -87,10 +87,14 @@ BTN_MENU_REPLIES = STAFF_UI["km"]["menu_replies"]
 BTN_MENU_CHANGE_CUSTOMER = STAFF_UI["km"]["menu_change_customer"]
 BTN_MENU_CHANGE_STAFF = STAFF_UI["km"]["menu_change_staff"]
 BTN_MENU_CLEAR = STAFF_UI["km"]["menu_clear"]
-BTN_REPLY_MGMT = "🔧 Reply Management"
+BTN_REPLY_MGMT = "🔧 Reply Mgmt"
+BTN_REPLY_MGMT_LEGACY = "🔧 Reply Management"
 BTN_EDIT_REPLIES_LEGACY = "🔧 Edit Replies"  # legacy cached keyboard label
 BTN_EDIT_REPLIES = BTN_REPLY_MGMT
-BTN_STAFF_MGMT = "👩‍💼 Staff Management"
+BTN_STAFF_MGMT = "👩‍💼 Staff Mgmt"
+BTN_STAFF_MGMT_LEGACY = "👩‍💼 Staff Management"
+
+KEYBOARD_LABEL_MAX_LEN = 20
 
 BTN_ADMIN_EDIT = "✏️ Edit Reply"
 BTN_ADMIN_EDIT_BUTTON = "🏷️ Edit Button"
@@ -270,6 +274,23 @@ def _register_command(cmd_map: dict[str, str], label: str, key: str) -> None:
         cmd_map[token] = key
 
 
+def keyboard_button_label(key: str, full_label: str) -> str:
+    """Short label for bottom Reply Keyboard — two buttons per row on mobile."""
+    parts = full_label.strip().split(None, 1)
+    emoji = parts[0] if parts else "📝"
+    if len(parts) > 1:
+        suffix = parts[1].split()[0]
+        if suffix.startswith("/"):
+            candidate = f"{emoji} {suffix}"
+            if len(candidate) <= KEYBOARD_LABEL_MAX_LEN:
+                return candidate
+    short = f"{emoji} /{key}"
+    if len(short) <= KEYBOARD_LABEL_MAX_LEN:
+        return short
+    trim = KEYBOARD_LABEL_MAX_LEN - len(emoji) - 2
+    return f"{emoji} /{key[:max(trim, 4)]}"
+
+
 def _key_picker_label(key: str) -> str:
     for buttons in (REPLY_BUTTONS.get("km", {}), STATUS_BUTTONS.get("km", {}), QUESTION_BUTTONS.get("km", {})):
         raw = buttons.get(key)
@@ -309,16 +330,25 @@ def _load_button_maps() -> None:
         for key, label in buttons.items():
             _register_command(LABEL_TO_QUESTION_KEY, label, key)
             _register_command(COMMAND_TO_QUESTION_KEY, label, key)
+            kb_label = keyboard_button_label(key, label)
+            _register_command(LABEL_TO_QUESTION_KEY, kb_label, key)
+            _register_command(COMMAND_TO_QUESTION_KEY, kb_label, key)
 
     for _lang, buttons in REPLY_BUTTONS.items():
         for key, label in buttons.items():
             _register_command(LABEL_TO_REPLY_KEY, label, key)
             _register_command(COMMAND_TO_REPLY_KEY, label, key)
+            kb_label = keyboard_button_label(key, label)
+            _register_command(LABEL_TO_REPLY_KEY, kb_label, key)
+            _register_command(COMMAND_TO_REPLY_KEY, kb_label, key)
 
     for _lang, buttons in STATUS_BUTTONS.items():
         for key, label in buttons.items():
             _register_command(LABEL_TO_STATUS_KEY, label, key)
             _register_command(COMMAND_TO_STATUS_KEY, label, key)
+            kb_label = keyboard_button_label(key, label)
+            _register_command(LABEL_TO_STATUS_KEY, kb_label, key)
+            _register_command(COMMAND_TO_STATUS_KEY, kb_label, key)
 
 
 def refresh_button_maps() -> None:
@@ -340,14 +370,14 @@ def back_button(staff_lang: str) -> str:
 
 def is_reply_management_main_label(text: str) -> bool:
     raw = str(text or "").strip()
-    return raw in (BTN_REPLY_MGMT, BTN_EDIT_REPLIES_LEGACY)
+    return raw in (BTN_REPLY_MGMT, BTN_REPLY_MGMT_LEGACY, BTN_EDIT_REPLIES_LEGACY)
 
 
 def main_menu_action(text: str) -> str | None:
     raw = str(text or "").strip()
     if is_reply_management_main_label(raw):
         return "reply_management"
-    if raw == BTN_STAFF_MGMT:
+    if raw == BTN_STAFF_MGMT or raw == BTN_STAFF_MGMT_LEGACY:
         return "staff_management"
     action_keys = (
         "menu_questions",
@@ -538,7 +568,7 @@ def edit_lang_display(code: str) -> str:
     return EDIT_LANG_LABELS.get(normalize_customer_lang(code), code)
 
 
-def category_key_labels(staff_lang: str, category: str) -> list[tuple[str, str]]:
+def _category_keyboard_labels(staff_lang: str, category: str) -> list[str]:
     lang = normalize_staff_lang(staff_lang)
     if category == "questions":
         order, buttons = QUESTION_KEY_ORDER, QUESTION_BUTTONS[lang]
@@ -546,25 +576,19 @@ def category_key_labels(staff_lang: str, category: str) -> list[tuple[str, str]]
         order, buttons = REPLY_KEY_ORDER, REPLY_BUTTONS[lang]
     else:
         order, buttons = STATUS_KEY_ORDER, STATUS_BUTTONS[lang]
-    return [(key, buttons[key]) for key in order if key in buttons]
+    return [keyboard_button_label(key, buttons[key]) for key in order if key in buttons]
 
 
 def question_menu_rows(staff_lang: str) -> list[list[str]]:
-    lang = normalize_staff_lang(staff_lang)
-    labels = [QUESTION_BUTTONS[lang][key] for key in QUESTION_KEY_ORDER]
-    return _rows_one_per_label(labels, lang)
+    return _rows_one_per_label(_category_keyboard_labels(staff_lang, "questions"), normalize_staff_lang(staff_lang))
 
 
 def reply_menu_rows(staff_lang: str) -> list[list[str]]:
-    lang = normalize_staff_lang(staff_lang)
-    labels = [REPLY_BUTTONS[lang][key] for key in REPLY_KEY_ORDER]
-    return _rows_one_per_label(labels, lang)
+    return _rows_one_per_label(_category_keyboard_labels(staff_lang, "replies"), normalize_staff_lang(staff_lang))
 
 
 def status_menu_rows(staff_lang: str) -> list[list[str]]:
-    lang = normalize_staff_lang(staff_lang)
-    labels = [STATUS_BUTTONS[lang][key] for key in STATUS_KEY_ORDER]
-    return _rows_one_per_label(labels, lang)
+    return _rows_one_per_label(_category_keyboard_labels(staff_lang, "status"), normalize_staff_lang(staff_lang))
 
 
 def parse_question_label(text: str) -> str | None:
