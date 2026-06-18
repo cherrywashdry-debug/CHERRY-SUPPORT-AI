@@ -78,8 +78,9 @@ def test_question_english_not_thai() -> None:
 
 def test_reply_english_not_thai() -> None:
     text = quick_reply_text("price", "en")
-    assert "Price" in text
-    assert "210–240 THB" in text
+    assert "SERVICE PRICE" in text
+    assert "210–240 Baht" in text
+    assert "INCLUDED IN SERVICE" in text
     assert "บาท" not in text
 
 
