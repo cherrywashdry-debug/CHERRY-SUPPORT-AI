@@ -55,7 +55,8 @@ def test_v2_khmer_reply_buttons() -> None:
 
 def test_laundry_ready_reply_thai_exact() -> None:
     text = quick_reply_text("laundry_ready", "th")
-    assert "ผ้าของลูกค้าพร้อมแล้วค่ะ" in text
+    assert "ผ้าของคุณซักเสร็จแล้วค่ะ" in text
+    assert "เวลาจัดส่งเป็นไปตามรอบจัดส่งของทางร้าน" in text
     assert "ขอบคุณที่ใช้บริการ CHERRY Wash & Dry ❤️" in text
 
 
