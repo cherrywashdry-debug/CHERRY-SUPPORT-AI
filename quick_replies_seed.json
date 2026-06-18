@@ -77,11 +77,11 @@
     "cn": "🛵 员工正在前往取衣\n\n请稍候，并在取衣点准备好洗衣袋。\n\n感谢信任 CHERRY Wash & Dry ❤️"
   },
   "ask_location": {
-    "th": "📍 กรุณาส่งโลเคชั่นให้ทางร้านด้วยนะคะ\n\nเพื่อให้พนักงานสามารถตรวจสอบระยะทาง คำนวณค่าส่ง และเดินทางไปได้ถูกต้องค่ะ ❤️",
-    "en": "📍 Please send your location to us\n\nSo our staff can check the distance, calculate the delivery fee, and navigate correctly ❤️",
-    "km": "📍 សូមផ្ញើ Location\n\nដើម្បីឲ្យបុគ្គលិកពិនិត្យចម្ងាយ គណនាថ្លៃដឹក និងរកផ្លូវបានត្រឹមត្រូវ ❤️",
-    "id": "📍 Mohon kirim lokasi Anda\n\nAgar staf bisa cek jarak, hitung ongkir, dan navigasi dengan benar ❤️",
-    "cn": "📍 请发送您的位置\n\n以便员工核对距离、计算配送费并正确导航 ❤️"
+    "th": "🚚 สำหรับการขอรับผ้า\nกรุณาส่ง:\n📍 โลเคชั่น\n\n🏡 รูปอาคาร/บ้าน\n📷 รูปถุงผ้า\n\nพนักงานจะจัดรับผ้าให้ในไม่ช้าค่ะ",
+    "en": "🚚 For Pickup Request:\nPlease send your:\n📍 Location\n\n🏡 Building/Home\n📷 Laundry Photo\n\nOur staff will arrange pickup shortly.",
+    "km": "🚚 សម្រាប់សំណើរយកអាវ\nសូមផ្ញើ:\n📍 ទីតាំង\n\n🏡 រូបអគារ/ផ្ទះ\n📷 រូបថងអាវ\n\nបុគ្គលិកនឹងរៀបចំរយកឆាប់ៗ",
+    "id": "🚚 Untuk permintaan jemput\nSilakan kirim:\n📍 Lokasi\n\n🏡 Foto gedung/rumah\n📷 Foto tas cucian\n\nStaf akan atur jemput segera.",
+    "cn": "🚚 取件请求\n请发送：\n📍 位置\n\n🏡 建筑/门牌照片\n📷 洗衣袋照片\n\n工作人员将尽快安排取件。"
   },
   "ask_home_photo": {
     "th": "🏠 กรุณาส่งรูปหน้าบ้าน หรือจุดรับผ้าให้ชัดเจนด้วยนะคะ\n\nเพื่อให้พนักงานสามารถหาสถานที่รับผ้าได้ง่ายและถูกต้องค่ะ ❤️",
@@ -91,11 +91,11 @@
     "cn": "🏠 请发送清晰的门牌或取衣点照片\n\n以便员工轻松找到位置 ❤️"
   },
   "ask_bag_photo": {
-    "th": "👜 กรุณาส่งรูปถุงผ้า หรือกระเป๋าผ้าที่ต้องการให้พนักงานไปรับด้วยนะคะ\n\nเพื่อให้พนักงานสามารถตรวจสอบและรับผ้าได้ถูกต้องค่ะ ❤️",
-    "en": "👜 Please send a photo of the laundry bag you want us to pick up\n\nSo our staff can verify and collect it correctly ❤️",
-    "km": "👜 សូមផ្ញើរូបថង់អីវ៉ាត់\n\nដើម្បីឲ្យបុគ្គលិកពិនិត្យ និងយកអីវ៉ាត់បានត្រឹមត្រូវ ❤️",
-    "id": "👜 Mohon kirim foto tas cucian\n\nAgar staf bisa verifikasi dan jemput dengan benar ❤️",
-    "cn": "👜 请发送洗衣袋照片\n\n以便员工核对并正确取衣 ❤️"
+    "th": "💳 ลูกค้าสะดวกชำระเงินช่องทางไหนคะ?\nกรุณาแจ้งช่องทางชำระเงินที่ต้องการได้เลยค่ะ 😊\n━━━━━━━━━━━━━━\n💵 เงินสด\nชำระกับพนักงานเมื่อมารับผ้า\nหรือใส่เงินสดไว้ในกระเป๋าผ้า\n\n🏦 โอนเงินหลังจากได้รับบิล\nหลังการตรวจสอบ พนักงานจะส่งบิลให้คุณค่ะ\n\n🏦 รับโอนเงินผ่าน:\nABA • ACLEDA • ธนาคารอินโด • ธนาคารไทย\n━━━━━━━━━━━━━━\n⚠️ หมายเหตุ\nหากเลือกชำระเงินผ่านธนาคารแล้ว\nจะไม่สามารถเปลี่ยนเป็นชำระเงินสดภายหลังได้ค่ะ\n\n🧺 เสื้อผ้าจะเข้าสู่ขั้นตอนการซัก\nหลังจากได้รับการชำระเงินเรียบร้อยแล้วเท่านั้น\n\nขอบคุณค่ะ ❤️",
+    "en": "💳 Which payment method is convenient for you?\nPlease let us know your preferred payment method 😊\n━━━━━━━━━━━━━━\n💵 Cash\nPay the staff when they pick up your laundry\nor put cash in the laundry bag\n\n🏦 Bank transfer after receiving the bill\nAfter inspection, our staff will send you the bill\n\n🏦 We accept transfers via:\nABA • ACLEDA • Bank Indo • Thai Bank\n━━━━━━━━━━━━━━\n⚠️ Note\nIf you choose bank transfer,\nyou cannot change to cash payment later\n\n🧺 Laundry will enter the washing process\nonly after payment is confirmed\n\nThank you ❤️",
+    "km": "💳 តើអ្នកចង់បង់ប្រាក់តាមរបប់ណា?\nសូមប្រាប់វិធីបង់ប្រាក់ដែលអ្នកចង់បាន 😊\n━━━━━━━━━━━━━━\n💵 សាច់ប្រាក់\nបង់ជូនបុគ្គលិកពេលមកយកអាវ\nឬដាក់សាច់ប្រាក់ក្នុងថងអាវ\n\n🏦 ផ្ទេរប្រាក់ក្រោយទទួលវិក្កយបត្រ\nក្រោយពិនិត្យ បុគ្គលិកនឹងផ្ញើវិក្កយបត្រទៅអ្នក\n\n🏦 ទទួលផ្ទេរតាម:\nABA • ACLEDA • ធនាគារ Indo • ធនាគារ Thai\n━━━━━━━━━━━━━━\n⚠️ ចំណាំ\nបើជ្រើសផ្ទេរធនាគារហើយ\nមិនអាចប្តូរទៅសាច់ប្រាក់ក្រោយមកបាន\n\n🧺 អាវនឹងចូលដំណើរការបោក\nក្រោយបង់ប្រាក់រួចរាល់ប៉ុណ្ណោះ\n\nអរគុណ ❤️",
+    "id": "💳 Metode pembayaran apa yang paling mudah?\nSilakan beri tahu metode pembayaran yang Anda inginkan 😊\n━━━━━━━━━━━━━━\n💵 Tunai\nBayar ke staf saat jemput cucian\natau taruh uang tunai di tas cucian\n\n🏦 Transfer setelah menerima tagihan\nSetelah pemeriksaan, staf akan kirim tagihan\n\n🏦 Menerima transfer via:\nABA • ACLEDA • Bank Indo • Bank Thai\n━━━━━━━━━━━━━━\n⚠️ Catatan\nJika sudah memilih transfer bank,\ntidak bisa diubah ke tunai nanti\n\n🧺 Cucian akan masuk proses cuci\nhanya setelah pembayaran dikonfirmasi\n\nTerima kasih ❤️",
+    "cn": "💳 请问您希望使用哪种付款方式？\n请告知您想要的付款方式 😊\n━━━━━━━━━━━━━━\n💵 现金\n取衣时付给工作人员\n或将现金放入洗衣袋\n\n🏦 收到账单后转账\n核对后，工作人员会发送账单给您\n\n🏦 接受转账银行：\nABA • ACLEDA • Bank Indo • Bank Thai\n━━━━━━━━━━━━━━\n⚠️ 备注\n若已选择银行转账，\n之后无法改为现金付款\n\n🧺 衣物仅在\n确认付款后才会开始洗涤\n\n谢谢 ❤️"
   },
   "payment_method": {
     "th": "💳 ลูกค้าสะดวกชำระเงินช่องทางไหนคะ?\nกรุณาแจ้งช่องทางชำระเงินที่ต้องการได้เลยค่ะ 😊\n━━━━━━━━━━━━━━\n💵 เงินสด\nชำระกับพนักงานเมื่อมารับผ้า\nหรือใส่เงินสดไว้ในกระเป๋าผ้า\n\n🏦 โอนเงินหลังจากได้รับบิล\nหลังการตรวจสอบ พนักงานจะส่งบิลให้คุณค่ะ\n\n🏦 รับโอนเงินผ่าน:\nABA • ACLEDA • ธนาคารอินโด • ธนาคารไทย\n━━━━━━━━━━━━━━\n⚠️ หมายเหตุ\nหากเลือกชำระเงินผ่านธนาคารแล้ว\nจะไม่สามารถเปลี่ยนเป็นชำระเงินสดภายหลังได้ค่ะ\n\n🧺 เสื้อผ้าจะเข้าสู่ขั้นตอนการซัก\nหลังจากได้รับการชำระเงินเรียบร้อยแล้วเท่านั้น\n\nขอบคุณค่ะ ❤️",
