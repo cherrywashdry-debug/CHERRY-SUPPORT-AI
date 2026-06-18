@@ -184,7 +184,7 @@ def test_new_replies_have_all_customer_languages() -> None:
     from quick_replies import get_quick_replies
 
     langs = ("th", "en", "km", "id", "cn")
-    for key in ("wash_set_14kg", "wash_set_18kg", "orders_after_8pm", "inspect_laundry", "cannot_check_before_wash", "has_stains", "cannot_wash_one_machine", "delivery_from_930", "check_promotion"):
+    for key in ("wash_set_14kg", "wash_set_18kg", "orders_after_8pm", "inspect_laundry", "cannot_check_before_wash", "has_stains", "cannot_wash_one_machine", "delivery_from_930", "check_promotion", "wash_no_liability", "color_mix_warning", "underwear_wash_together", "pickup_downstairs_ready", "delivery_hours_ended", "cannot_answer"):
         block = get_quick_replies()[key]
         for lang in langs:
             text = str(block.get(lang, "")).strip()

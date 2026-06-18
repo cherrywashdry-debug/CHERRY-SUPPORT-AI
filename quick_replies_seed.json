@@ -173,5 +173,47 @@
     "km": "🎁 ពិនិត្យប្រូម៉ូសិនថ្មីៗតាមតំណនេះ\n👉 https://t.me/CherryWashDryPoipetBot",
     "id": "🎁 Cek promosi terbaru di link ini:\n👉 https://t.me/CherryWashDryPoipetBot",
     "cn": "🎁 可通过此链接查看最新优惠：\n👉 https://t.me/CherryWashDryPoipetBot"
+  },
+  "wash_no_liability": {
+    "th": "⚠️ สามารถซักได้ตามปกติค่ะ\n\nแต่ทางร้านไม่รับผิดชอบกรณีสูญหาย หรือ เสียหาย\nเนื่องจากเป็นของชิ้นเล็กและเป็นของใช้ส่วนตัวค่ะ\n\nขอบคุณค่ะ ❤️",
+    "en": "⚠️ We can wash it as usual.\n\nHowever, we are not responsible for loss or damage,\nas these are small personal items.\n\nThank you ❤️",
+    "km": "⚠️ អាចបោកបានតាមធម្មតា\n\nប៉ុន្តែហាងមិនទទួលខុសត្រូវករណីបាត់ ឬខូច\nព្រោះជារបស់តូច និងរបស់ប្រើប្រាស់ផ្ទាល់ខ្លួន\n\nអរគុណ ❤️",
+    "id": "⚠️ Bisa dicuci seperti biasa.\n\nNamun toko tidak bertanggung jawab jika hilang atau rusak,\nkarena ini barang kecil dan pemakaian pribadi.\n\nTerima kasih ❤️",
+    "cn": "⚠️ 可以正常清洗。\n\n但本店不对遗失或损坏负责，\n因为这是小型个人用品。\n\n谢谢 ❤️"
+  },
+  "color_mix_warning": {
+    "th": "ทางร้านใช้เครื่องซักผ้าในการซักเสื้อผ้าทุกประเภท\nและไม่มีบริการซักมือค่ะ\n\n👕 สำหรับเสื้อผ้าสีขาว\nหากซักรวมกับเสื้อผ้าสี และไม่ได้แจ้งพนักงานให้แยกซัก\nอาจมีความเสี่ยงที่สีจะตก\nหรือเกิดคราบเปื้อนจากเสื้อผ้าชิ้นอื่นได้ค่ะ\n\n✨ หากต้องการซักแยก กรุณาแจ้งพนักงานก่อนเริ่มซัก\nขอบคุณสำหรับความเข้าใจค่ะ ❤️",
+    "en": "We use washing machines for all types of laundry,\nand we do not offer hand washing.\n\n👕 For white clothes,\nif washed together with colored clothes without notifying staff to wash separately,\nthere is a risk of color bleeding\nor stains from other garments.\n\n✨ If you need separate washing, please notify staff before washing begins.\nThank you for your understanding ❤️",
+    "km": "ហាងប្រើម៉ាស៊ីនបោកសម្រាប់អាវគ្រប់ប្រភេទ\nហើយមិនមានសេវាបោកដៃ\n\n👕 សម្រាប់អាវពណ៌ស\nបើបោករួមជាមួយអាវពណ៌ ហើយមិនបានប្រាប់បុគ្គលិកឲ្យបោកឡែង\nអាចមានហានិភ័យថាពណ៌ចរចេញ\nឬមានស្នាមប្រឡាក់ពីអាវផ្សេង\n\n✨ បើចង់បោកឡែង សូមប្រាប់បុគ្គលិកមុនពេលចាប់ផ្តើមបោក\nអរគុណដែលយល់ដឹង ❤️",
+    "id": "Kami menggunakan mesin cuci untuk semua jenis pakaian,\ndan tidak ada layanan cuci tangan.\n\n👕 Untuk pakaian putih,\njika dicuci bersama pakaian berwarna tanpa memberi tahu staff untuk cuci terpisah,\nberisiko warna luntur\natau noda dari pakaian lain.\n\n✨ Jika perlu cuci terpisah, mohon beri tahu staff sebelum cuci dimulai.\nTerima kasih atas pengertian Anda ❤️",
+    "cn": "本店使用洗衣机清洗各类衣物，\n不提供手洗服务。\n\n👕 对于白色衣物，\n若与有色衣物混洗且未提前通知员工分开洗涤，\n可能存在褪色\n或受其他衣物污染的风险。\n\n✨ 如需分开洗涤，请在开始洗涤前告知员工。\n感谢您的理解 ❤️"
+  },
+  "underwear_wash_together": {
+    "th": "⚠️ สำหรับชุดชั้นใน ถุงเท้า และสิ่งของชิ้นเล็ก\nไม่จำเป็นต้องแยกซักต่างหากก็ได้ค่ะ\n\nอย่างไรก็ตาม เนื่องจากเป็นสิ่งของขนาดเล็ก\nทางร้านไม่สามารถรับผิดชอบกรณีสูญหายได้ค่ะ\n\nขอขอบคุณค่ะ ❤️",
+    "en": "⚠️ For underwear, socks, and small items,\nseparate washing is not required.\n\nHowever, as these are small items,\nwe cannot be responsible if they are lost.\n\nThank you ❤️",
+    "km": "⚠️ សម្រាប់ខោអាវក្នុង រទេះជើង និងរបស់តូចៗ\nមិនចាំបាច់បោកឡែងខុសគ្នាទេ\n\nទោះយ៉ាងណា ព្រោះជារបស់តូច\nហាងមិនអាចទទួលខុសត្រូវករណីបាត់បានទេ\n\nអរគុណ ❤️",
+    "id": "⚠️ Untuk pakaian dalam, kaos kaki, dan barang kecil,\ntidak perlu dicuci terpisah.\n\nNamun karena ukurannya kecil,\ntoko tidak bisa bertanggung jawab jika hilang.\n\nTerima kasih ❤️",
+    "cn": "⚠️ 内衣、袜子及小件物品\n不必分开洗涤。\n\n但由于物品较小，\n本店无法对遗失情况负责。\n\n谢谢 ❤️"
+  },
+  "pickup_downstairs_ready": {
+    "th": "พนักงานของเราจะเข้าไปรับผ้า\nเมื่อคุณวางกระเป๋าผ้าไว้กับยาม\nหรือ วางไว้ที่ชั้นล่างเรียบร้อยแล้วค่ะ\n\nกรุณาส่งรูปถ่ายมาให้ทางร้านเพื่อยืนยันด้วยนะคะ\nขอบคุณค่ะ ❤️",
+    "en": "Our staff will pick up your laundry\nwhen you leave the laundry bag with security\nor have placed it on the lower floor.\n\nPlease send us a photo to confirm.\nThank you ❤️",
+    "km": "បុគ្គលិករបស់យើងនឹងចូលទៅយកអាវ\nពេលអ្នកដាក់ថងអាវជាមួយអ្នករក្សាការណ៍\nឬដាក់នៅជាន់ក្រោមរួចរាល់ហើយ\n\nសូមផ្ញើរូបមកហាងដើម្បីបញ្ជាក់\nអរគុណ ❤️",
+    "id": "Staf kami akan masuk untuk mengambil cucian\nsetelah Anda menaruh tas cucian ke satpam\natau sudah menaruhnya di lantai bawah.\n\nMohon kirim foto kepada kami untuk konfirmasi.\nTerima kasih ❤️",
+    "cn": "我们的员工会在您\n将洗衣袋交给保安\n或已放置在楼下后，上门取衣。\n\n请发送照片给我们确认。\n谢谢 ❤️"
+  },
+  "delivery_hours_ended": {
+    "th": "🙏 ขออภัยค่ะ\nบริการจัดส่งวันนี้หมดเวลาแล้วค่ะ\n\n🚚 รับ/ส่ง จะเริ่มใหม่พรุ่งนี้เวลา 9:30 am ค่ะ\n\nขอบคุณค่ะ ❤️",
+    "en": "🙏 We're sorry,\ntoday's delivery service has ended.\n\n🚚 Pickup/delivery will resume tomorrow at 9:30 am.\n\nThank you ❤️",
+    "km": "🙏 សូមទោស\nសេវាដឹកថ្ងៃនេះចប់ម៉ោងហើយ\n\n🚚 ទទួល/ដឹកនឹងចាប់ផ្តើមឡើងវិញថ្ងៃស្អែកម៉ោង 9:30\n\nអរគុណ ❤️",
+    "id": "🙏 Maaf,\nlayanan antar hari ini sudah berakhir.\n\n🚚 Jemput/antar akan dimulai lagi besok pukul 9:30.\n\nTerima kasih ❤️",
+    "cn": "🙏 抱歉，\n今日配送服务已结束。\n\n🚚 取送将于明天 9:30 恢复。\n\n谢谢 ❤️"
+  },
+  "cannot_answer": {
+    "th": "🙏 ขออภัยนะคะ\n\nเราเป็นพนักงานไม่สามารถตอบคำถามนี้ได้ค่ะ\nกรุณาสอบถามอีกครั้งหลังเวลา 09:30 น.\n\nขอบคุณค่ะ ❤️",
+    "en": "🙏 We're sorry.\n\nWe are staff and cannot answer this question.\nPlease ask again after 09:30.\n\nThank you ❤️",
+    "km": "🙏 សូមទោស\n\nយើងជាបុគ្គលិក មិនអាចឆ្លើយសំណួរនេះបានទេ\nសូមសួរម្តងទៀតក្រោយម៉ោង 09:30\n\nអរគុណ ❤️",
+    "id": "🙏 Maaf.\n\nKami staf dan tidak dapat menjawab pertanyaan ini.\nSilakan tanyakan lagi setelah pukul 09:30.\n\nTerima kasih ❤️",
+    "cn": "🙏 抱歉。\n\n我们是员工，无法回答此问题。\n请在 09:30 后再咨询。\n\n谢谢 ❤️"
   }
 }
