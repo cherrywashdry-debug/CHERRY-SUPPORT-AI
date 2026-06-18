@@ -180,6 +180,18 @@ def test_owner_access_denied_message() -> None:
     assert "Owner only" in OWNER_ACCESS_DENIED
 
 
+def test_new_replies_have_all_customer_languages() -> None:
+    from quick_replies import get_quick_replies
+
+    langs = ("th", "en", "km", "id", "cn")
+    for key in ("wash_set_14kg", "wash_set_18kg", "orders_after_8pm", "inspect_laundry", "cannot_check_before_wash", "has_stains"):
+        block = get_quick_replies()[key]
+        for lang in langs:
+            text = str(block.get(lang, "")).strip()
+            assert text, f"missing {key}/{lang}"
+            assert text != "TODO", f"placeholder {key}/{lang}"
+
+
 def test_pack_button_specs_into_rows() -> None:
     from quick_replies import pack_button_specs_into_rows
 
@@ -217,6 +229,7 @@ if __name__ == "__main__":
     test_add_and_delete_reply_roundtrip()
     test_timestamped_reply_backup()
     test_owner_access_denied_message()
+    test_new_replies_have_all_customer_languages()
     test_pack_button_specs_into_rows()
     test_main_menu_hides_admin_tools_from_staff()
     print("ALL OK")

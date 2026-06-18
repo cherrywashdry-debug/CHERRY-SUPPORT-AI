@@ -26,5 +26,7 @@ RUN mkdir -p data
 
 
 
+COPY data/reply_images/ data/reply_images/
+
 CMD ["python", "-u", "app.py"]
 

@@ -53,8 +53,11 @@
         "price",
         "delivery_fee",
         "opening_hours",
+        "orders_after_8pm",
         "processing_time",
         "points",
+        "wash_set_14kg",
+        "wash_set_18kg",
         "ironing",
         "no_shoes",
         "before_service",
@@ -65,15 +68,21 @@
         "ask_home_photo",
         "ask_bag_photo",
         "payment_method",
-        "ask_separate_or_together"
+        "ask_separate_or_together",
+        "inspect_laundry",
+        "cannot_check_before_wash",
+        "has_stains"
       ],
       "buttons": {
         "km": {
           "price": "💰 /តម្លៃ",
           "delivery_fee": "🚚 /ថ្លៃដឹក",
           "opening_hours": "⏰ /ម៉ោងបើក",
+          "orders_after_8pm": "🌙 /ទទួលម៉ោង8pm",
           "processing_time": "⏳ /រយៈពេល",
           "points": "🎁 /ពិន្ទុ",
+          "wash_set_14kg": "🧺 /ឈុត14kg",
+          "wash_set_18kg": "🧺 /ឈុត18kg",
           "ironing": "❌ /មិនមានអ៊ុត",
           "no_shoes": "❌ /មិនមានស្បែកជើង",
           "before_service": "⚠️ /មុនប្រើសេវា",
@@ -84,14 +93,20 @@
           "ask_home_photo": "🏠 /សូមផ្ញើរូបផ្ទះ",
           "ask_bag_photo": "👜 /សូមផ្ញើរូបកាបូប",
           "payment_method": "💳 /បង់ប្រាក់",
-          "ask_separate_or_together": "🧺 /បោករួមរឺបោកផ្សេង"
+          "ask_separate_or_together": "🧺 /បោករួមរឺបោកផ្សេង",
+          "inspect_laundry": "📦 /សូមពិនិត្យ",
+          "cannot_check_before_wash": "🙏 /មិនអាចដឹងមុនបោក",
+          "has_stains": "🧽 /មានស្នាមប្រឡាក់"
         },
         "th": {
           "price": "💰 /ราคา",
           "delivery_fee": "🚚 /ค่าส่ง",
           "opening_hours": "⏰ /เวลาเปิด",
+          "orders_after_8pm": "🌙 /หลัง20:00",
           "processing_time": "⏳ /ระยะเวลา",
           "points": "🎁 /แต้ม",
+          "wash_set_14kg": "🧺 /ชุด14kg",
+          "wash_set_18kg": "🧺 /ชุด18kg",
           "ironing": "❌ /ไม่มีรีดผ้า",
           "no_shoes": "❌ /ไม่มีซักรองเท้า",
           "before_service": "⚠️ /ก่อนใช้บริการ",
@@ -102,14 +117,20 @@
           "ask_home_photo": "🏠 /ส่งรูปบ้าน",
           "ask_bag_photo": "👜 /ส่งรูปถุงผ้า",
           "payment_method": "💳 /ชำระเงิน",
-          "ask_separate_or_together": "🧺 /ซักแยกหรือรวม"
+          "ask_separate_or_together": "🧺 /ซักแยกหรือรวม",
+          "inspect_laundry": "📦 /ตรวจผ้า",
+          "cannot_check_before_wash": "🙏 /ตรวจก่อนซักไม่ได้",
+          "has_stains": "🧽 /พบคราบ"
         },
         "id": {
           "price": "💰 /harga",
           "delivery_fee": "🚚 /ongkir",
           "opening_hours": "⏰ /jambuka",
+          "orders_after_8pm": "🌙 /setelah20",
           "processing_time": "⏳ /waktu",
           "points": "🎁 /poin",
+          "wash_set_14kg": "🧺 /set14kg",
+          "wash_set_18kg": "🧺 /set18kg",
           "ironing": "❌ /tidaksetrika",
           "no_shoes": "❌ /tidakcucisepatu",
           "before_service": "⚠️ /sebelumlayanan",
@@ -120,7 +141,10 @@
           "ask_home_photo": "🏠 /fotorumah",
           "ask_bag_photo": "👜 /fototas",
           "payment_method": "💳 /pembayaran",
-          "ask_separate_or_together": "🧺 /campuratauterpisah"
+          "ask_separate_or_together": "🧺 /campuratauterpisah",
+          "inspect_laundry": "📦 /periksa",
+          "cannot_check_before_wash": "🙏 /tidakbisacek",
+          "has_stains": "🧽 /adanoda"
         }
       }
     },

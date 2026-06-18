@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -56,7 +56,7 @@ from admin_reply_mgmt import (
     handle_reply_mgmt_screen,
     send_reply_mgmt_menu,
 )
-import staff_users
+from reply_image_store import bundled_image_path
 
 load_dotenv()
 
@@ -66,7 +66,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - SIMPLE-V5.2"
+VERSION = "CHERRY QUICK REPLY - SIMPLE-V5.8"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -376,12 +376,22 @@ async def send_customer_quick_reply_message(
     customer = get_customer_lang(context)
     text = quick_reply_text(key, customer)
     file_id = quick_reply_image_file_id(key, customer)
+    bundled = bundled_image_path(key)
     if file_id:
         if len(text) <= 1024:
             await message.reply_photo(file_id, caption=text, reply_markup=reply_markup)
         else:
             await message.reply_photo(file_id, reply_markup=reply_markup)
             await message.reply_text(text, reply_markup=reply_markup)
+        return
+    if bundled:
+        with bundled.open("rb") as photo_fh:
+            photo = InputFile(photo_fh, filename=bundled.name)
+            if len(text) <= 1024:
+                await message.reply_photo(photo, caption=text, reply_markup=reply_markup)
+            else:
+                await message.reply_photo(photo, reply_markup=reply_markup)
+                await message.reply_text(text, reply_markup=reply_markup)
         return
     await message.reply_text(text, reply_markup=reply_markup)
 

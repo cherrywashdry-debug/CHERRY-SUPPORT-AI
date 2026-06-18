@@ -104,8 +104,11 @@ STAFF_KEYBOARD_KEY_ORDER: list[str] = [
     "price",
     "delivery_fee",
     "opening_hours",
+    "orders_after_8pm",
     "processing_time",
     "points",
+    "wash_set_14kg",
+    "wash_set_18kg",
     "laundry_ready",
     "staff_on_the_way_delivery",
     "staff_on_the_way_pickup",
@@ -116,6 +119,9 @@ STAFF_KEYBOARD_KEY_ORDER: list[str] = [
     "ironing",
     "no_shoes",
     "ask_separate_or_together",
+    "inspect_laundry",
+    "cannot_check_before_wash",
+    "has_stains",
     "before_service",
 ]
 

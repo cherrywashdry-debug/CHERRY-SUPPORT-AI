@@ -110,5 +110,47 @@
     "km": "🧺 តើអ្នកចង់បោកឡែង ឬបោករួម?\n\nបើចង់បោកឡែង (ស/ពណ៌/ពិសេស) សូមប្រាប់មុន ❤️",
     "id": "🧺 Ingin cuci terpisah atau digabung?\n\nJika perlu cuci terpisah (putih/warna/khusus), beri tahu kami sebelumnya ❤️",
     "cn": "🧺 您要分开洗还是合并洗？\n\n如需分开洗（白/色/特殊），请提前告知 ❤️"
+  },
+  "wash_set_14kg": {
+    "th": "🧺 ชุดแบบนี้ใช้เครื่องซักผ้าขนาดเล็ก 14 กก. ค่ะ\n💰 ราคา 240 บาท\n\nทางร้านคิดราคาตามจำนวนเครื่องซักที่ใช้\nไม่ใช่ตามน้ำหนักของเสื้อผ้า\n\n✨ เพื่อให้มั่นใจในความสะอาด\nและคุณภาพการซักที่ดีที่สุดสำหรับลูกค้าทุกท่าน\nขอบคุณค่ะ ❤️",
+    "en": "🧺 A load like this uses our small 14 kg washing machine.\n💰 Price: 240 THB\n\nWe charge by the number of machines used,\nnot by the weight of the laundry.\n\n✨ To ensure the best cleanliness\nand washing quality for every customer,\nthank you ❤️",
+    "km": "🧺 ឈុតបែបនេះប្រើម៉ាស៊ីនបោកតូច 14 kg\n💰 តម្លៃ 240 បាត\n\nហាងគិតតម្លៃតាមចំនួនម៉ាស៊ីនបោកដែលប្រើ\nមិនមែនតាមទម្ងន់អាវ\n\n✨ ដើម្បីធានាភាពស្អាត\nនិងគុណភាពបោកល្អបំផុតសម្រាប់អតិថិជនទាំងអស់\nអរគុណ ❤️",
+    "id": "🧺 Set seperti ini memakai mesin cuci kecil 14 kg.\n💰 Harga: 240 THB\n\nKami hitung berdasarkan jumlah mesin yang dipakai,\nbukan berat pakaian.\n\n✨ Agar tetap bersih\ndan kualitas cuci terbaik untuk semua pelanggan,\nterima kasih ❤️",
+    "cn": "🧺 这样一袋衣物使用 14 公斤小型洗衣机。\n💰 价格 240 泰铢\n\n本店按使用的洗衣机台数计费，\n不按衣物重量计费。\n\n✨ 为确保每位顾客\n都能获得最洁净、最优质的洗涤效果，\n谢谢 ❤️"
+  },
+  "wash_set_18kg": {
+    "th": "🧺 ชุดแบบนี้ใช้เครื่องซักผ้าขนาดใหญ่ 18 กก.\n💰 ราคา 270–300 บาท\n\nราคาของทางร้านคิดตามจำนวนเครื่องซักที่ใช้\nเพื่อให้มั่นใจในความสะอาดและคุณภาพการซักที่ดีที่สุดค่ะ\n\nขอบคุณค่ะ 🙏❤️",
+    "en": "🧺 A load like this uses our large 18 kg washing machine.\n💰 Price: 270–300 THB\n\nWe charge by the number of machines used\nto ensure the best cleanliness and washing quality.\n\nThank you 🙏❤️",
+    "km": "🧺 ឈុតបែបនេះប្រើម៉ាស៊ីនបោកធំ 18 kg\n💰 តម្លៃ 270–300 បាត\n\nហាងគិតតម្លៃតាមចំនួនម៉ាស៊ីនបោកដែលប្រើ\nដើម្បីធានាភាពស្អាត និងគុណភាពបោកល្អបំផុត\n\nអរគុណ 🙏❤️",
+    "id": "🧺 Set seperti ini memakai mesin cuci besar 18 kg.\n💰 Harga: 270–300 THB\n\nKami hitung berdasarkan jumlah mesin yang dipakai\nagar tetap bersih dan kualitas cuci terbaik.\n\nTerima kasih 🙏❤️",
+    "cn": "🧺 这样一袋衣物使用 18 公斤大型洗衣机。\n💰 价格 270–300 泰铢\n\n本店按使用的洗衣机台数计费，\n以确保最洁净、最优质的洗涤效果。\n\n谢谢 🙏❤️"
+  },
+  "orders_after_8pm": {
+    "th": "🌙 รับออเดอร์หลัง 20:00 น.\n\n✅ หากปริมาณงานไม่มาก\nเราจะพยายามซักและจัดส่งให้ภายในคืนเดียวกัน\n\n📦 หากไม่สามารถดำเนินการได้\nผ้าของคุณจะถูกจัดส่งในวันถัดไป\nเริ่มตั้งแต่เวลา 09:30 น.\n\nขอบคุณค่ะ ❤️",
+    "en": "🌙 We accept orders after 20:00.\n\n✅ If workload is light,\nwe will try to wash and deliver the same night.\n\n📦 If we cannot complete it in time,\nyour laundry will be delivered the next day\nstarting from 09:30.\n\nThank you ❤️",
+    "km": "🌙 ទទួលការកម្មង់ក្រោយ 20:00\n\n✅ បើការងារមិនច្រើន\nយើងនឹងព្យាយាមបោក និងដឹកឲ្យក្នុងយប់ដូចគ្នា\n\n📦 បើមិនអាចធ្វើទាន់\nអីវ៉ាត់របស់អ្នកនឹងដឹកថ្ងៃបន្ទាប់\nចាប់ពីម៉ោង 09:30\n\nអរគុណ ❤️",
+    "id": "🌙 Kami terima pesanan setelah 20:00.\n\n✅ Jika antrian tidak terlalu banyak,\nkami akan coba cuci dan antar malam yang sama.\n\n📦 Jika tidak sempat,\ncucian Anda akan diantar keesokan harinya\nmulai pukul 09:30.\n\nTerima kasih ❤️",
+    "cn": "🌙 20:00 后接单。\n\n✅ 若工作量不大，\n我们会尽量当晚洗涤并送达。\n\n📦 若无法当晚完成，\n您的衣物将于次日\n09:30 起安排送达。\n\n谢谢 ❤️"
+  },
+  "inspect_laundry": {
+    "th": "📦 กรุณาเปิดและตรวจสอบเสื้อผ้าของคุณทันทีหลังได้รับ\nหากพบปัญหา เช่น\n• เสื้อผ้าสูญหาย\n• เสื้อผ้าสลับกับลูกค้าท่านอื่น\n• เสื้อผ้าเสียหาย\n\n📸 กรุณาแจ้งทางร้านพร้อมรูปถ่ายและบิล ภายใน 3 วันนับจากวันที่ซัก\n⚠️ หลังจาก 3 วัน ทางร้านจะถือว่าออเดอร์เสร็จสมบูรณ์และปิดงานเรียบร้อย จะไม่สามารถตรวจสอบได้อีก\n\nCHERRY WASH & DRY ขอบคุณค่ะ ❤️",
+    "en": "📦 Please open and check your laundry immediately after receiving it.\nIf you notice any issues, such as:\n• Missing items\n• Items mixed with another customer's laundry\n• Damaged items\n\n📸 Please notify us with photos and your receipt within 3 days from the wash date.\n⚠️ After 3 days, we will consider the order complete and closed; we can no longer investigate.\n\nCHERRY WASH & DRY Thank you ❤️",
+    "km": "📦 សូមបើក និងពិនិត្យអាវរបស់អ្នកភ្លាមបន្ទាប់ពីទទួល\nបើមានបញ្ហា ដូចជា:\n• អាវបាត់\n• អាវច្រឡំជាមួយអតិថិជនផ្សេង\n• អាវខូច\n\n📸 សូមជូនដំណឹងហាងជាមួយរូប និងវិក្កយបត្រ ក្នុង 3 ថ្ងៃពីថ្ងៃបោក\n⚠️ ក្រោយ 3 ថ្ងៃ យើងចាត់ទុកថារួចរាល់ មិនអាចពិនិត្យបន្ត\n\nCHERRY WASH & DRY អរគុណ ❤️",
+    "id": "📦 Mohon buka dan periksa cucian Anda segera setelah menerima.\nJika ada masalah, seperti:\n• Pakaian hilang\n• Pakaian tertukar dengan pelanggan lain\n• Pakaian rusak\n\n📸 Mohon hubungi kami dengan foto dan struk dalam 3 hari sejak tanggal cuci.\n⚠️ Setelah 3 hari, pesanan dianggap selesai dan tidak dapat diperiksa lagi.\n\nCHERRY WASH & DRY Terima kasih ❤️",
+    "cn": "📦 收到后请立即打开并检查您的衣物。\n如有问题，例如：\n• 衣物丢失\n• 与其他顾客衣物混淆\n• 衣物损坏\n\n📸 请在洗涤日起 3 天内凭照片和单据通知我们。\n⚠️ 超过 3 天后，订单视为完成并结案，无法再核查。\n\nCHERRY WASH & DRY 谢谢 ❤️"
+  },
+  "cannot_check_before_wash": {
+    "th": "🙏 ขออภัยค่ะ\nทางร้านไม่สามารถตรวจสอบสภาพเดิมของเสื้อผ้าทุกชิ้นก่อนซักได้\nเนื่องจากทางร้านใช้เครื่องซักผ้าในการให้บริการ\n\nจึงอาจไม่สามารถทราบได้ว่าคราบ รอยขาด ความเสียหาย หรือสภาพของเสื้อผ้ามีอยู่ก่อนการซักหรือไม่\n\nขอบคุณที่เข้าใจค่ะ ❤️",
+    "en": "🙏 We're sorry,\nwe cannot inspect the original condition of every garment before washing,\nas we use washing machines for our service.\n\nTherefore, we may not know whether stains, tears, damage, or other conditions existed before washing.\n\nThank you for your understanding ❤️",
+    "km": "🙏 សូមទោស\nហាងមិនអាចពិនិត្យគុណភាពដើមរបស់អាវគ្រប់ដុំមុនបោកបានទេ\nព្រោះហាងប្រើម៉ាស៊ីនបោកផ្តល់សេវា\n\nយើងអាចមិនដឹងបានថាមានស្នាមប្រឡាក់ រហែក ខូច ឬស្ថានភាពផ្សេងៗមានមុនបោកឬអត់\n\nអរគុណដែលយល់ដឹង ❤️",
+    "id": "🙏 Maaf,\ntoko kami tidak dapat memeriksa kondisi asli setiap pakaian sebelum cuci,\nkarena kami menggunakan mesin cuci.\n\nOleh karena itu, kami mungkin tidak tahu apakah noda, sobek, kerusakan, atau kondisi lain sudah ada sebelum cuci.\n\nTerima kasih atas pengertian Anda ❤️",
+    "cn": "🙏 抱歉，\n本店无法在洗涤前逐一检查每件衣物的原始状况，\n因为我们使用洗衣机提供服务。\n\n因此，我们可能无法得知污渍、破损、损坏或其他状况是否在洗涤前就已存在。\n\n感谢您的理解 ❤️"
+  },
+  "has_stains": {
+    "th": "สวัสดีค่ะ\nพบคราบบางจุดบนเสื้อผ้าก่อนนำมาซักนะคะ\n\nทางร้านจะช่วยทำความสะอาดให้อย่างดีที่สุด\nแต่ไม่สามารถรับประกันได้ว่าคราบจะออก 100% ค่ะ\n\nขอบคุณค่ะ ❤️",
+    "en": "Hello,\nWe noticed some stains on your laundry before washing.\n\nWe will do our best to clean them,\nbut we cannot guarantee 100% stain removal.\n\nThank you ❤️",
+    "km": "សូមជំរាបសួរ\nយើងបានឃើញថាមានស្នាមប្រឡាក់ខ្លះៗលើអាវមុនបោក\n\nយើងនឹងព្យាយាមសម្អាតឲ្យល្អបំផុត\nប៉ុន្តែមិនអាចធានាថាស្នាមប្រឡាក់នឹងចេញ 100% បាន\n\nអរគុណ ❤️",
+    "id": "Halo,\nkami menemukan beberapa noda pada cucian Anda sebelum dicuci.\n\nKami akan membersihkan sebaik mungkin,\nnamun tidak dapat menjamin noda hilang 100%.\n\nTerima kasih ❤️",
+    "cn": "您好，\n我们在洗涤前发现衣物上有部分污渍。\n\n我们会尽力清洗，\n但无法保证污渍 100% 去除。\n\n谢谢 ❤️"
   }
 }

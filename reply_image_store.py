@@ -14,6 +14,7 @@ logger = logging.getLogger("cherry.quick_reply.images")
 ROOT = Path(__file__).resolve().parent
 JSON_PATH = ROOT / "quick_reply_images.json"
 SEED_PATH = ROOT / "quick_reply_images_seed.json"
+BUNDLED_IMAGES_DIR = ROOT / "data" / "reply_images"
 
 CUSTOMER_LANGS = frozenset({"th", "en", "km", "id", "cn"})
 
@@ -95,6 +96,15 @@ def get_image_file_id(key: str, lang: str) -> str:
     lang_key = str(lang).strip().lower()
     block = load_images().get(key, {})
     return str(block.get(lang_key, "")).strip()
+
+
+def bundled_image_path(key: str) -> Path | None:
+    """Shipped reply photo on disk (used when no Telegram file_id is saved yet)."""
+    for ext in (".png", ".jpg", ".jpeg", ".webp"):
+        path = BUNDLED_IMAGES_DIR / f"{key}{ext}"
+        if path.is_file():
+            return path
+    return None
 
 
 def save_image(key: str, lang: str, file_id: str, *, backup: bool = True) -> None:
