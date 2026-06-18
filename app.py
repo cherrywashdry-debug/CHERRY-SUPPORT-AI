@@ -66,7 +66,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - SIMPLE-V5.25"
+VERSION = "CHERRY QUICK REPLY - SIMPLE-V5.26"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -523,6 +523,36 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await send_staff_lang_menu(update)
 
 
+async def notify_owner_access_request(
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    name: str,
+    username: str,
+    uid: int,
+) -> tuple[bool, str | None]:
+    """Send inline Approve/Reject to owner. Returns (ok, error_message)."""
+    oid = owner_telegram_id()
+    if oid is None:
+        return False, "owner_not_configured"
+
+    owner_text = (
+        "📩 New Staff Access Request\n\n"
+        f"Name: {name}\n"
+        f"Username: {username}\n"
+        f"Telegram ID: {uid}"
+    )
+    try:
+        await context.bot.send_message(
+            chat_id=oid,
+            text=owner_text,
+            reply_markup=staff_request_keyboard(uid),
+        )
+        return True, None
+    except Exception as exc:
+        logger.warning("notify owner failed oid=%s uid=%s err=%s", oid, uid, exc)
+        return False, str(exc)
+
+
 async def register_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     user = update.effective_user
@@ -531,33 +561,51 @@ async def register_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if has_staff_access(update):
         await message.reply_text("You already have access. Press /start to continue.")
         return
-    if staff_users.has_pending_request(user.id):
-        await message.reply_text("Your access request is already pending.")
-        return
+
     name, username, uid = user_label(user)
-    try:
-        staff_users.add_pending_request(uid, name, username)
-    except ValueError as exc:
-        await message.reply_text(str(exc))
+    already_pending = staff_users.has_pending_request(user.id)
+
+    if not already_pending:
+        try:
+            staff_users.add_pending_request(uid, name, username)
+        except ValueError as exc:
+            await message.reply_text(str(exc))
+            return
+
+    ok, err = await notify_owner_access_request(
+        context,
+        name=name,
+        username=username,
+        uid=uid,
+    )
+    if ok:
+        if already_pending:
+            await message.reply_text(
+                "Your access request is still pending.\n"
+                "We re-sent the approval request to the owner.\n"
+                "Please wait."
+            )
+        else:
+            await message.reply_text(
+                "Access request sent to owner. Please wait for approval."
+            )
         return
 
-    oid = owner_telegram_id()
-    if oid is None:
-        await message.reply_text("Owner is not configured. Please contact admin.")
+    if err == "owner_not_configured":
+        await message.reply_text(
+            "⛔ Owner is not configured on the server.\n"
+            f"Your Telegram ID: {uid}\n\n"
+            "Please send this ID to the shop owner."
+        )
         return
 
-    owner_text = (
-        "📩 New Staff Access Request\n\n"
-        f"Name: {name}\n"
-        f"Username: {username}\n"
-        f"Telegram ID: {uid}"
+    await message.reply_text(
+        "⛔ Could not notify the owner automatically.\n"
+        f"Your Telegram ID: {uid}\n\n"
+        "Please send this ID to the shop owner, or ask the owner to open the bot "
+        "and check 👩‍💼 Staff Mgmt → 🔄 Pending Requests.\n\n"
+        f"Error: {err}"
     )
-    await context.bot.send_message(
-        chat_id=oid,
-        text=owner_text,
-        reply_markup=staff_request_keyboard(uid),
-    )
-    await message.reply_text("Access request sent to owner. Please wait for approval.")
 
 
 async def staff_access_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
