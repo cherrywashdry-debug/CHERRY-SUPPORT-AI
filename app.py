@@ -57,6 +57,7 @@ from admin_reply_mgmt import (
     send_reply_mgmt_menu,
 )
 from reply_image_store import bundled_image_path
+import staff_users
 
 load_dotenv()
 
@@ -66,7 +67,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cherry.quick_reply")
 
-VERSION = "CHERRY QUICK REPLY - SIMPLE-V5.27"
+VERSION = "CHERRY QUICK REPLY - SIMPLE-V5.28"
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "data" / "bot_state.pkl"
 
@@ -107,6 +108,27 @@ def owner_telegram_id() -> int | None:
         return int(raw)
     except ValueError:
         return None
+
+
+def approver_telegram_ids() -> list[int]:
+    """Owner plus ALLOWED_USER_IDS — all may receive Approve/Reject requests."""
+    ids: list[int] = []
+    oid = owner_telegram_id()
+    if oid is not None:
+        ids.append(oid)
+    for uid in staff_users.allowed_user_ids():
+        if uid not in ids:
+            ids.append(uid)
+    return ids
+
+
+def can_approve_staff(update: Update) -> bool:
+    user = update.effective_user
+    if user is None:
+        return False
+    if is_owner(update):
+        return True
+    return user.id in set(staff_users.allowed_user_ids())
 
 
 def is_owner(update: Update) -> bool:
@@ -530,9 +552,9 @@ async def notify_owner_access_request(
     username: str,
     uid: int,
 ) -> tuple[bool, str | None]:
-    """Send inline Approve/Reject to owner. Returns (ok, error_message)."""
-    oid = owner_telegram_id()
-    if oid is None:
+    """Send inline Approve/Reject to owner/approvers. Returns (ok, error_message)."""
+    approvers = approver_telegram_ids()
+    if not approvers:
         return False, "owner_not_configured"
 
     owner_text = (
@@ -541,16 +563,27 @@ async def notify_owner_access_request(
         f"Username: {username}\n"
         f"Telegram ID: {uid}"
     )
-    try:
-        await context.bot.send_message(
-            chat_id=oid,
-            text=owner_text,
-            reply_markup=staff_request_keyboard(uid),
-        )
+    errors: list[str] = []
+    sent = 0
+    for chat_id in approvers:
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=owner_text,
+                reply_markup=staff_request_keyboard(uid),
+            )
+            sent += 1
+        except Exception as exc:
+            logger.warning(
+                "notify approver failed chat_id=%s uid=%s err=%s",
+                chat_id,
+                uid,
+                exc,
+            )
+            errors.append(f"{chat_id}: {exc}")
+    if sent:
         return True, None
-    except Exception as exc:
-        logger.warning("notify owner failed oid=%s uid=%s err=%s", oid, uid, exc)
-        return False, str(exc)
+    return False, "; ".join(errors) if errors else "notify_failed"
 
 
 async def register_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -612,7 +645,7 @@ async def staff_access_callback(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     if not query or not query.data:
         return
-    if not is_owner(update):
+    if not can_approve_staff(update):
         await query.answer("Owner only.", show_alert=True)
         return
     await query.answer()
@@ -942,6 +975,7 @@ def build_app() -> Application:
 
 def main() -> None:
     logger.info("Starting %s", VERSION)
+    staff_users.ensure_staff_file()
     app = build_app()
     webhook_url = resolve_webhook_url()
     port = int(os.getenv("PORT", "8080"))

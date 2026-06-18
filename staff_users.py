@@ -41,6 +41,10 @@ def _parse_allowed_env() -> list[int]:
     return ids
 
 
+def allowed_user_ids() -> list[int]:
+    return _parse_allowed_env()
+
+
 def _validate(data: Any) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("staff_users.json must be a JSON object")
