@@ -129,7 +129,6 @@ STAFF_KEYBOARD_KEY_ORDER: list[str] = [
     "inspect_laundry",
     "cannot_check_before_wash",
     "has_stains",
-    "wash_no_liability",
     "underwear_wash_together",
     "before_service",
 ]

@@ -79,7 +79,6 @@
         "inspect_laundry",
         "cannot_check_before_wash",
         "has_stains",
-        "wash_no_liability",
         "underwear_wash_together"
       ],
       "buttons": {
@@ -113,7 +112,6 @@
           "inspect_laundry": "📦 /សូមពិនិត្យ",
           "cannot_check_before_wash": "🙏 /មិនអាចដឹងមុនបោក",
           "has_stains": "🧽 /មានស្នាមប្រឡាក់",
-          "wash_no_liability": "⚠️ /បោកបានតែមិនទទួលខុសត្រូវ",
           "underwear_wash_together": "👕 /ខោឤវក្នុងបោករួមបានតែ"
         },
         "th": {
@@ -146,7 +144,6 @@
           "inspect_laundry": "📦 /ตรวจผ้า",
           "cannot_check_before_wash": "🙏 /ตรวจก่อนซักไม่ได้",
           "has_stains": "🧽 /พบคราบ",
-          "wash_no_liability": "⚠️ /ซักได้ไม่รับผิดชอบ",
           "underwear_wash_together": "👕 /ชุดในซักรวมได้"
         },
         "id": {
@@ -179,7 +176,6 @@
           "inspect_laundry": "📦 /periksa",
           "cannot_check_before_wash": "🙏 /tidakbisacek",
           "has_stains": "🧽 /adanoda",
-          "wash_no_liability": "⚠️ /cucitidaktanggung",
           "underwear_wash_together": "👕 /dalambareng"
         }
       }
