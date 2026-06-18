@@ -152,5 +152,26 @@
     "km": "សូមជំរាបសួរ\nយើងបានឃើញថាមានស្នាមប្រឡាក់ខ្លះៗលើអាវមុនបោក\n\nយើងនឹងព្យាយាមសម្អាតឲ្យល្អបំផុត\nប៉ុន្តែមិនអាចធានាថាស្នាមប្រឡាក់នឹងចេញ 100% បាន\n\nអរគុណ ❤️",
     "id": "Halo,\nkami menemukan beberapa noda pada cucian Anda sebelum dicuci.\n\nKami akan membersihkan sebaik mungkin,\nnamun tidak dapat menjamin noda hilang 100%.\n\nTerima kasih ❤️",
     "cn": "您好，\n我们在洗涤前发现衣物上有部分污渍。\n\n我们会尽力清洗，\n但无法保证污渍 100% 去除。\n\n谢谢 ❤️"
+  },
+  "cannot_wash_one_machine": {
+    "th": "🧺 เสื้อผ้าของคุณไม่สามารถซักในเครื่องเดียวได้ค่ะ\n\nหากซักรวมกันมากเกินไป ผ้าอาจไม่สะอาดทั่วถึง และเครื่องอาจปั่นหมาดได้ ไม่เต็มประสิทธิภาพ\nซึ่งอาจทำให้เกิดกลิ่นตกค้างบนเสื้อผ้าได้ค่ะ\n\n✨ เพื่อให้ได้ผลลัพธ์ที่สะอาด หอม และมีคุณภาพดีที่สุด\nทางร้านจำเป็นต้องซัก 2 เครื่องค่ะ\n\nขอบคุณค่ะ ❤️",
+    "en": "🧺 Your laundry cannot be washed in a single machine.\n\nIf too much is washed together, clothes may not be cleaned thoroughly, and the machine may spin too densely, reducing efficiency.\nThis may cause lingering odors on your clothes.\n\n✨ For the cleanest, freshest, and best-quality results,\nwe need to wash your laundry in 2 machines.\n\nThank you ❤️",
+    "km": "🧺 អាវរបស់អ្នកមិនអាចបោកក្នុងម៉ាស៊ីនមួយបានទេ\n\nបើបោករួមគ្នាច្រើនពេក អាវអាចមិនស្អាតល្អ ហើយម៉ាស៊ីនអាចបង្វិលមិនពេញប្រសិទ្ធភាព\nដែលអាចធ្វើឲ្យមានក្លិនជាប់នៅលើអាវ\n\n✨ ដើម្បីឲ្យស្អាត ក្លិនឈ្ងុយ និងគុណភាពល្អបំផុត\nហាងត្រូវបោក 2 ម៉ាស៊ីន\n\nអរគុណ ❤️",
+    "id": "🧺 Cucian Anda tidak dapat dicuci dalam satu mesin.\n\nJika dicuci terlalu penuh, pakaian mungkin tidak bersih merata dan mesin bisa berputar terlalu padat, sehingga kurang efisien.\nHal ini dapat menyebabkan bau menempel pada pakaian.\n\n✨ Agar hasilnya paling bersih, wangi, dan berkualitas,\nkami perlu mencuci dengan 2 mesin.\n\nTerima kasih ❤️",
+    "cn": "🧺 您的衣物无法只用一台机器清洗。\n\n若一次放入过多，衣物可能无法彻底洗净，机器甩干也可能不顺畅、效率降低，\n还可能导致衣物残留异味。\n\n✨ 为达到最干净、清新、优质的洗涤效果，\n本店需要分 2 台机器清洗。\n\n谢谢 ❤️"
+  },
+  "delivery_from_930": {
+    "th": "🚚 สามารถรับ–ส่งเสื้อผ้าได้หลังเวลา 09:30 น. ค่ะ\n\nขอบคุณค่ะ ❤️",
+    "en": "🚚 We can pick up and deliver laundry after 09:30.\n\nThank you ❤️",
+    "km": "🚚 អាចទទួល-ដឹកអាវបានក្រោយម៉ោង 09:30\n\nអរគុណ ❤️",
+    "id": "🚚 Kami dapat jemput dan antar cucian setelah pukul 09:30.\n\nTerima kasih ❤️",
+    "cn": "🚚 09:30 后可提供取送服务。\n\n谢谢 ❤️"
+  },
+  "check_promotion": {
+    "th": "🎁 เช็คโปรโมชั่นล่าสุดได้ที่ลิงก์นี้ค่ะ\n👉 https://t.me/CherryWashDryPoipetBot",
+    "en": "🎁 Check our latest promotions at this link:\n👉 https://t.me/CherryWashDryPoipetBot",
+    "km": "🎁 ពិនិត្យប្រូម៉ូសិនថ្មីៗតាមតំណនេះ\n👉 https://t.me/CherryWashDryPoipetBot",
+    "id": "🎁 Cek promosi terbaru di link ini:\n👉 https://t.me/CherryWashDryPoipetBot",
+    "cn": "🎁 可通过此链接查看最新优惠：\n👉 https://t.me/CherryWashDryPoipetBot"
   }
 }
